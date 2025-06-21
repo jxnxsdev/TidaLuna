@@ -2,6 +2,7 @@ import electron from "electron";
 import os from "os";
 
 import { readFile, rm, writeFile } from "fs/promises";
+import fs from "fs";
 import mime from "mime";
 
 import path from "path";
@@ -181,11 +182,66 @@ const tidalAppPath = path.join(process.resourcesPath, "original.asar");
 const tidalPackage = await readFile(path.resolve(path.join(tidalAppPath, "package.json")), "utf8").then(JSON.parse);
 const startPath = path.join(tidalAppPath, tidalPackage.main);
 
+
+// #region extract Tidal app.asar
+const extractDir = path.join(process.resourcesPath, "tidal-extracted");
+
+async function copyRecursive(src: string, dest: string): Promise<void> {
+	const entries = await fs.promises.readdir(src, { withFileTypes: true });
+	await fs.promises.mkdir(dest, { recursive: true });
+
+	for (const entry of entries) {
+		const srcPath = path.join(src, entry.name);
+		const destPath = path.join(dest, entry.name);
+
+		if (entry.isDirectory()) {
+			await copyRecursive(srcPath, destPath); // recurse into subdirectory
+		} else {
+			try {
+				await fs.promises.copyFile(srcPath, destPath); // try to copy file
+			} catch (err) {
+				console.warn(`Failed to copy file: ${srcPath} -> ${destPath}:`, err.message);
+				// Skip the file and continue
+			}
+		}
+	}
+}
+
+await copyRecursive(tidalAppPath, extractDir);
+// #endregion
+
+// #region Modify WindowController
+
+const windowControllerPath = path.resolve(process.resourcesPath, "tidal-extracted", "app", "main", "window", "WindowController.js");
+const outputPath = path.join(process.resourcesPath, "tidal-extracted", "app", "main", "window", "WindowController.js");
+let windowController = await readFile(windowControllerPath, "utf8");
+if (!windowController.includes('// luna-modified: true')) {
+	windowController = windowController.replace(
+		/this\.window = new _electron\.BrowserWindow\(\{\s*([\s\S]*?)\}\);/,
+		(match, innerOptions) => {
+			if (/transparent:\s*true/.test(innerOptions)) return match;
+
+			const modifiedOptions = `transparent: true,\n      ${innerOptions}`;
+			return `this.window = new _electron.BrowserWindow({\n      ${modifiedOptions}});`;
+		}
+	);
+
+	windowController += '\n\n// luna-modified: true';
+
+	await writeFile(
+		outputPath,
+		windowController,
+		"utf8"
+	);
+}
+// #endregion
+
+
 // @ts-expect-error This exists?
-electron.app.setAppPath?.(tidalAppPath);
+electron.app.setAppPath?.(extractDir);
 electron.app.name = tidalPackage.name;
 
-require = createRequire(tidalAppPath);
+require = createRequire(extractDir);
 
 // Replace the default electron BrowserWindow with our proxied one
 const electronPath = require.resolve("electron");
