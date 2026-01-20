@@ -35,7 +35,20 @@ export const getOrCreateLoadingContainer = () => {
         Object.assign(messageContainer.style, messageStyles);
         loadingContainer.appendChild(messageContainer);
 
-        document.body.appendChild(loadingContainer);
+        // Prefer body, fallback to documentElement for early loading (tidal-hifi)
+        if (document.body) {
+            document.body.appendChild(loadingContainer);
+        } else {
+            document.documentElement.appendChild(loadingContainer);
+            // Move to body once available
+            const observer = new MutationObserver(() => {
+                if (document.body) {
+                    observer.disconnect();
+                    document.body.appendChild(loadingContainer);
+                }
+            });
+            observer.observe(document.documentElement, { childList: true });
+        }
     } else {
         messageContainer = loadingContainer.querySelector<HTMLDivElement>("#tidaluna-loading-text")!;
     }

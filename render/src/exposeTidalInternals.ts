@@ -52,12 +52,37 @@ const dynamicResolve: QuartzPlugin["dynamicResolve"] = async ({ name, moduleId, 
 	return result;
 };
 
-let scripts: NodeListOf<HTMLScriptElement>;
+// Async wait for quartz scripts to be in DOM (needed for tidal-hifi where preload runs before HTML loads)
+const waitForScripts = (): Promise<NodeListOf<HTMLScriptElement>> => {
+	return new Promise((resolve) => {
+		const checkScripts = () => {
+			const scripts = document.querySelectorAll<HTMLScriptElement>(`script[type="luna/quartz"]`);
+			return scripts.length >= 1 ? scripts : null;
+		};
+		const setupObserver = () => {
+			const observer = new MutationObserver(() => {
+				const scripts = checkScripts();
+				if (scripts) {
+					observer.disconnect();
+					resolve(scripts);
+				}
+			});
+			observer.observe(document.documentElement, { childList: true, subtree: true });
+		};
+		if (document.readyState === "loading") {
+			document.addEventListener("DOMContentLoaded", () => {
+				const scripts = checkScripts();
+				scripts ? resolve(scripts) : setupObserver();
+			});
+		} else {
+			const scripts = checkScripts();
+			scripts ? resolve(scripts) : setupObserver();
+		}
+	});
+};
+
 messageContainer.innerText = "Waiting for tidal scripts to load...\n";
-while ((scripts = document.querySelectorAll<HTMLScriptElement>(`script[type="luna/quartz"]`))) {
-	// Block until all scripts are loaded
-	if (scripts.length !== 0) break;
-}
+const scripts = await waitForScripts();
 
 // Theres usually only 1 script on page that needs injecting (https://desktop.tidal.com/) see native/injector
 // So dw about blocking for loop

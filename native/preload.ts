@@ -6,15 +6,24 @@ import path from "path";
 
 const ipcRendererUnloadable = unloadableEmitter(ipcRenderer, null, "ipcRenderer");
 
+// Support both contextIsolation: true (official Tidal) and false (tidal-hifi)
+const expose = (name: string, value: any) => {
+	if (process.contextIsolated) {
+		contextBridge.exposeInMainWorld(name, value);
+	} else {
+		(window as any)[name] = value;
+	}
+};
+
 // Allow render side to execute invoke
-contextBridge.exposeInMainWorld("__ipcRenderer", {
+expose("__ipcRenderer", {
 	invoke: ipcRenderer.invoke,
 	send: ipcRenderer.send,
 	on: (channel: string, listener: AnyFn) => ipcRendererUnloadable.onU(null, channel, (_, ...args) => listener(...args)),
 	once: (channel: string, listener: AnyFn) => ipcRendererUnloadable.onceU(null, channel, (_, ...args) => listener(...args)),
 });
 // Expose path module
-contextBridge.exposeInMainWorld("path", path);
+expose("path", path);
 
 type ConsoleMethodName = {
 	[K in keyof Console]: Console[K] extends (...args: any[]) => any ? K : never;
