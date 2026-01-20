@@ -12,6 +12,8 @@ interface FetchOptions extends Omit<TrackStreamOptions, "deciper"> {
 		tags: Record<string, string[] | string>;
 		coverUrl?: string;
 	};
+	/** For DASH streams, only fetch the init segment (for metadata parsing) */
+	initSegmentOnly?: boolean;
 }
 
 export { FetchProgress } from "./fetchStream";
@@ -46,9 +48,12 @@ export const fetchMediaItemStream = ({ manifestMimeType, manifest }: PlaybackInf
 			}
 			case "application/dash+xml": {
 				const trackManifest = manifest.tracks.audios[0];
+				const segments = options.initSegmentOnly
+					? trackManifest.segments.filter((segment) => segment.init)
+					: trackManifest.segments;
 				return Readable.from(
 					fetchStream(
-						trackManifest.segments.map((segment) => segment.url),
+						segments.map((segment) => segment.url),
 						options,
 					),
 					{ objectMode: false },

@@ -6,9 +6,15 @@ import type { PlaybackInfo } from "../../helpers";
 
 export const parseStreamFormat = async (playbackInfo: PlaybackInfo): Promise<{ format: IAudioMetadata["format"]; bytes?: number }> => {
 	const progress: FetchProgress = {};
-	// note that you cannot trust bytes to be populated until the stream is finished. parseStream will read the entire stream ensuring this
-	const stream = await fetchMediaItemStream(playbackInfo, { bytesWanted: 8192, progress });
-	const mimeType = playbackInfo.manifestMimeType === "application/vnd.tidal.bts" ? playbackInfo.manifest.mimeType : "audio/mp4";
+	const isDash = playbackInfo.manifestMimeType === "application/dash+xml";
+	// For DASH, only fetch init segment (contains metadata without media data)
+	// For BTS/FLAC, fetch first 8KB which contains all metadata
+	const stream = await fetchMediaItemStream(playbackInfo, {
+		bytesWanted: isDash ? undefined : 8192,
+		initSegmentOnly: isDash,
+		progress,
+	});
+	const mimeType = isDash ? "audio/mp4" : playbackInfo.manifest.mimeType;
 	const { format } = await parseStream(stream, { mimeType });
 	return { format, bytes: progress.total };
 };
