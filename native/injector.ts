@@ -9,6 +9,8 @@ import { fileURLToPath, pathToFileURL } from "url";
 
 import Module, { createRequire } from "module";
 
+const fontUrlRegex = /\.(woff2?|ttf|otf|eot)(\?.*)?$/i;
+
 // #region Bundle
 const bundleDir = process.env.TIDALUNA_DIST_PATH ?? path.dirname(fileURLToPath(import.meta.url));
 const tidalAppPath = path.join(process.resourcesPath, "original.asar");
@@ -97,6 +99,13 @@ electron.app.whenReady().then(async () => {
 		}
 		// Fix tidal trying to bypass cors
 		if (req.url.endsWith("?cors")) return fetch(req);
+		// Fix font loading - fonts require credentials: 'omit' for CORS
+		if (fontUrlRegex.test(req.url)) {
+			return electron.net.fetch(req.url, {
+				bypassCustomProtocolHandlers: true,
+				credentials: "omit",
+			});
+		}
 		// All other requests passthrough
 		return electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
 	});
