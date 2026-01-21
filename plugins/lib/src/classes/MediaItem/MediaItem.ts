@@ -26,6 +26,7 @@ export type MediaFormat = {
 };
 type MediaItemCache = {
 	format?: { [K in redux.AudioQuality]?: MediaFormat };
+	actualAudioQuality?: redux.AudioQuality;
 };
 
 export class MediaItem extends ContentBase {
@@ -33,6 +34,11 @@ export class MediaItem extends ContentBase {
 	public static readonly availableTags = availableTags;
 
 	private static cache = ReactiveStore.getStore("@luna/MediaItemCache");
+
+	private static _supportsSpatialAudio: boolean | undefined;
+	public static get supportsSpatialAudio(): boolean | undefined {
+		return MediaItem._supportsSpatialAudio;
+	}
 
 	private static async fetchMediaItem(itemId: redux.ItemId, contentType: redux.ContentType) {
 		// Supress missing content warning when programatically loading mediaItems
@@ -54,11 +60,15 @@ export class MediaItem extends ContentBase {
 		if (itemId === undefined) return;
 		// Prefetch mediaItemCache while constructing
 		const mediaItemCache = MediaItem.cache.getReactive<MediaItemCache>(String(itemId), { format: {} });
-		return super.fromStore(itemId, "mediaItems", async (mediaItem) => {
+		const item = await super.fromStore(itemId, "mediaItems", async (mediaItem) => {
 			mediaItem = mediaItem ??= await this.fetchMediaItem(itemId, contentType);
 			if (mediaItem === undefined) return;
-			return new MediaItem(itemId, mediaItem, contentType, await mediaItemCache);
+			const cache = await mediaItemCache;
+			return new MediaItem(itemId, mediaItem, contentType, cache);
 		});
+		// Fetch real quality for spatial tracks
+		if (item) await item.fetchBestQuality();
+		return item;
 	}
 	public static fromIsrc: (isrc: string) => Promise<MediaItem | undefined> = memoize(async (isrc) => {
 		let bestMediaItem: MediaItem | undefined = undefined;
@@ -118,6 +128,11 @@ export class MediaItem extends ContentBase {
 			asyncDebounce(async ({ playbackContext }: redux.InterceptPayload<"playbackControls/MEDIA_PRODUCT_TRANSITION">) => {
 				const mediaItem = await this.fromPlaybackContext(playbackContext);
 				if (mediaItem === undefined) return;
+
+				// Detect spatial audio support based on actual playback
+				if (mediaItem.tidalItem.audioModes?.includes("DOLBY_ATMOS") || mediaItem.tidalItem.audioModes?.includes("SONY_360RA")) {
+					this._supportsSpatialAudio = playbackContext.actualAudioMode !== "STEREO";
+				}
 
 				await emit(mediaItem, mediaItem.trace.err.withContext("mediaProductTransition.runListeners"));
 			}),
@@ -324,18 +339,41 @@ export class MediaItem extends ContentBase {
 	}
 	public get qualityTags(): Quality[] {
 		if (this.contentType !== "track") return [];
-		return Quality.fromMetaTags(this.tidalItem.mediaMetadata?.tags);
+		const tags = Quality.fromMetaTags(this.tidalItem.mediaMetadata?.tags);
+		const audioQuality = Quality.fromAudioQuality(this.tidalItem.audioQuality);
+		// Placeholder for lossy tracks so TidalTags can display Low/Lowest
+		if (tags.length === 0 && audioQuality !== undefined && audioQuality < Quality.High) tags.push(Quality.High);
+		return tags;
 	}
 	public get bestQuality(): Quality {
 		if (this.contentType !== "track") {
 			this.trace.warn("MediaItem quality called on non-track!", this);
 			return Quality.High;
 		}
-		return Quality.max(
-			...Quality.fromMetaTags(this.tidalItem.mediaMetadata?.tags),
-			Quality.fromAudioQuality(this.tidalItem.audioQuality) ?? Quality.Lowest,
-		);
+		const allTags = Quality.fromMetaTags(this.tidalItem.mediaMetadata?.tags);
+		const hasSpatial = allTags.some((q) => q === Quality.Atmos || q === Quality.Sony630);
+		// Filter out spatial audio tags - they can't display correct metadata
+		const tags = allTags.filter((q) => q !== Quality.Atmos && q !== Quality.Sony630);
+		// For spatial-only tracks, use cached actualAudioQuality or default to HiRes
+		if (hasSpatial && tags.length === 0) {
+			if (this.cache.actualAudioQuality) {
+				return Quality.fromAudioQuality(this.cache.actualAudioQuality) ?? Quality.HiRes;
+			}
+			return Quality.HiRes;
+		}
+		return Quality.max(...tags, Quality.fromAudioQuality(this.tidalItem.audioQuality) ?? Quality.Lowest);
 	}
+	/** Fetches playbackInfo to get real quality for spatial-only tracks */
+	public fetchBestQuality: () => Promise<Quality> = memoize(async () => {
+		const allTags = Quality.fromMetaTags(this.tidalItem.mediaMetadata?.tags);
+		const hasSpatial = allTags.some((q) => q === Quality.Atmos || q === Quality.Sony630);
+		const nonSpatialTags = allTags.filter((q) => q !== Quality.Atmos && q !== Quality.Sony630);
+		// Spatial-only tracks need playbackInfo lookup to get real quality
+		if (hasSpatial && nonSpatialTags.length === 0 && !this.cache.actualAudioQuality) {
+			await this.playbackInfo();
+		}
+		return this.bestQuality;
+	});
 	public get duration(): number | undefined {
 		return this.tidalItem.duration;
 	}
@@ -361,9 +399,10 @@ export class MediaItem extends ContentBase {
 	// #endregion
 
 	// #region PlaybackInfo
-	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo> = memoize(async (audioQuality?: redux.AudioQuality) => {
+	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo | undefined> = memoize(async (audioQuality?: redux.AudioQuality) => {
 		audioQuality ??= Quality.Max.audioQuality;
 		const playbackInfo = await getPlaybackInfo(this.id, audioQuality);
+		if (!playbackInfo) return undefined;
 		const [_, emitFormat] = this.formatEmitters[audioQuality] ?? [];
 		this.cache.format ??= {};
 		this.cache.format[audioQuality] = {
@@ -371,6 +410,7 @@ export class MediaItem extends ContentBase {
 			bitDepth: playbackInfo.bitDepth,
 			sampleRate: playbackInfo.sampleRate,
 		};
+		this.cache.actualAudioQuality = playbackInfo.audioQuality;
 		emitFormat?.(this.cache.format[audioQuality]!, this.trace.err.withContext("playbackInfo.emitFormat"));
 		return playbackInfo;
 	});
@@ -383,11 +423,13 @@ export class MediaItem extends ContentBase {
 	public download: (path: string, audioQuality?: redux.AudioQuality) => Promise<void> = asyncDebounce(
 		async (path: string, audioQuality?: redux.AudioQuality) => {
 			const [playbackInfo, flagTags] = await Promise.all([this.playbackInfo(audioQuality), this.flacTags()]);
+			if (!playbackInfo) throw new Error(`Track ${this.id} is not available`);
 			return download(playbackInfo, path, flagTags);
 		},
 	);
 	public async fileExtension(audioQuality?: redux.AudioQuality): Promise<string> {
 		const playbackInfo = await this.playbackInfo(audioQuality);
+		if (!playbackInfo) throw new Error(`Track ${this.id} is not available`);
 		switch (playbackInfo.manifestMimeType) {
 			case "application/dash+xml":
 				return "m4a";
@@ -402,26 +444,32 @@ export class MediaItem extends ContentBase {
 	public withFormat(unloads: LunaUnloads, audioQuality: redux.AudioQuality, listener: (format: MediaFormat) => void): LunaUnload {
 		const [onFormat] = (this.formatEmitters[audioQuality] ??= registerEmitter<MediaFormat>());
 		const unload = onFormat(unloads, listener);
-		if (this.cache.format?.[audioQuality] !== undefined) listener(this.cache.format[audioQuality]);
+		// Use actualAudioQuality as fallback key for cache lookup (handles Atmos/Sony360 fallback quality)
+		const cacheKey = audioQuality ?? this.cache.actualAudioQuality;
+		const cachedFormat = cacheKey !== undefined ? this.cache.format?.[cacheKey] : undefined;
+		if (cachedFormat !== undefined) listener(cachedFormat);
 		return unload;
 	}
 	public updateFormat: (audioQuality?: redux.AudioQuality, force?: true) => Promise<void> = asyncDebounce(async (audioQuality, force) => {
 		this.cache.format ??= {};
+		const requestedQuality = audioQuality;
 		audioQuality ??= Quality.Max.audioQuality;
 		const format = (this.cache.format[audioQuality] ??= {});
 
-		if (format.bitrate !== undefined && force !== true) return;
+		if (format.bitrate !== undefined && format.sampleRate !== undefined && force !== true) return;
 
 		const playbackInfo = await this.playbackInfo(audioQuality);
+		if (!playbackInfo) return;
 		format.duration = this.duration;
 
-		if (format.bitDepth === undefined || format.sampleRate === undefined || format.duration === undefined) {
+		if (format.bitDepth === undefined || format.sampleRate === undefined || format.duration === undefined || format.bytes === undefined) {
 			const { format: streamFormat, bytes } = await parseStreamFormat(playbackInfo);
 			format.bytes = bytes;
-			format.bitDepth = streamFormat.bitsPerSample ?? format.bitDepth;
-			format.sampleRate = streamFormat.sampleRate ?? format.sampleRate;
+			format.bitDepth = streamFormat.bitsPerSample || format.bitDepth;
+			format.sampleRate = streamFormat.sampleRate || format.sampleRate;
 			format.duration = streamFormat.duration ?? format.duration;
 			format.codec = streamFormat.codec?.toLowerCase() ?? format.codec;
+			// Complement with DASH manifest data if available
 			if (playbackInfo.manifestMimeType === "application/dash+xml") {
 				format.bitrate = playbackInfo.manifest.tracks.audios[0].bitrate.bps ?? format.bitrate;
 				format.bytes = playbackInfo.manifest.tracks.audios[0].size?.b ?? format.bytes;
@@ -432,8 +480,19 @@ export class MediaItem extends ContentBase {
 
 		format.bitrate ??= !!format.bytes && !!format.duration ? (format.bytes / format.duration) * 8 : undefined;
 
+		// Also store format under actual audio quality for cache lookup (handles Atmos/Sony360 fallback)
+		if (playbackInfo.audioQuality !== audioQuality) {
+			this.cache.format[playbackInfo.audioQuality] = format;
+		}
+
 		const [_, emitFormat] = this.formatEmitters[playbackInfo.audioQuality] ?? [];
 		emitFormat?.(format, this.trace.err.withContext("updateFormat.emitFormat"));
+
+		// Emit to originally requested quality if different
+		if (requestedQuality !== playbackInfo.audioQuality) {
+			const [_, emitRequested] = this.formatEmitters[requestedQuality] ?? [];
+			emitRequested?.(format, this.trace.err.withContext("updateFormat.emitFormat.requested"));
+		}
 	});
 	// #endregion
 }

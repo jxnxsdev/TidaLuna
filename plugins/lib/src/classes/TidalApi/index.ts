@@ -16,6 +16,7 @@ export type { PlaybackInfoResponse };
 
 export class TidalApi {
 	public static trace: Tracer = libTrace.withSource("TidalApi").trace;
+	private static unavailableTracks = new Set<redux.ItemId>();
 
 	public static async getAuthHeaders() {
 		const { clientId, token } = await getCredentials();
@@ -36,7 +37,7 @@ export class TidalApi {
 				headers: await this.getAuthHeaders(),
 			});
 			if (statusOK(res.status)) return res.json();
-			if (res.status === 404) return undefined;
+			if (res.status === 403 || res.status === 404) return undefined;
 			if (!retry) this.trace.err.withContext(url).throw(`${res.status} ${res.statusText}`);
 			retry = false;
 			await sleep(1000);
@@ -49,12 +50,15 @@ export class TidalApi {
 
 	// Lock to two concurrent requests
 	private static readonly playbackInfoSemaphore = new Semaphore(2);
-	public static playbackInfo(trackId: redux.ItemId, audioQuality: redux.AudioQuality) {
-		return this.playbackInfoSemaphore.with(() =>
+	public static async playbackInfo(trackId: redux.ItemId, audioQuality: redux.AudioQuality) {
+		if (this.unavailableTracks.has(trackId)) return undefined;
+		const result = await this.playbackInfoSemaphore.with(() =>
 			this.fetch<PlaybackInfoResponse>(
 				`https://desktop.tidal.com/v1/tracks/${trackId}/playbackinfo?audioquality=${audioQuality}&playbackmode=STREAM&assetpresentation=FULL`,
 			),
 		);
+		if (result === undefined) this.unavailableTracks.add(trackId);
+		return result;
 	}
 
 	public static async lyrics(trackId: redux.ItemId) {
