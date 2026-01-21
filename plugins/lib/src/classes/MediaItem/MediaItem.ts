@@ -399,9 +399,10 @@ export class MediaItem extends ContentBase {
 	// #endregion
 
 	// #region PlaybackInfo
-	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo> = memoize(async (audioQuality?: redux.AudioQuality) => {
+	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo | undefined> = memoize(async (audioQuality?: redux.AudioQuality) => {
 		audioQuality ??= Quality.Max.audioQuality;
 		const playbackInfo = await getPlaybackInfo(this.id, audioQuality);
+		if (!playbackInfo) return undefined;
 		const [_, emitFormat] = this.formatEmitters[audioQuality] ?? [];
 		this.cache.format ??= {};
 		this.cache.format[audioQuality] = {
@@ -422,11 +423,13 @@ export class MediaItem extends ContentBase {
 	public download: (path: string, audioQuality?: redux.AudioQuality) => Promise<void> = asyncDebounce(
 		async (path: string, audioQuality?: redux.AudioQuality) => {
 			const [playbackInfo, flagTags] = await Promise.all([this.playbackInfo(audioQuality), this.flacTags()]);
+			if (!playbackInfo) throw new Error(`Track ${this.id} is not available`);
 			return download(playbackInfo, path, flagTags);
 		},
 	);
 	public async fileExtension(audioQuality?: redux.AudioQuality): Promise<string> {
 		const playbackInfo = await this.playbackInfo(audioQuality);
+		if (!playbackInfo) throw new Error(`Track ${this.id} is not available`);
 		switch (playbackInfo.manifestMimeType) {
 			case "application/dash+xml":
 				return "m4a";
@@ -456,6 +459,7 @@ export class MediaItem extends ContentBase {
 		if (format.bitrate !== undefined && format.sampleRate !== undefined && force !== true) return;
 
 		const playbackInfo = await this.playbackInfo(audioQuality);
+		if (!playbackInfo) return;
 		format.duration = this.duration;
 
 		if (format.bitDepth === undefined || format.sampleRate === undefined || format.duration === undefined || format.bytes === undefined) {

@@ -2,7 +2,6 @@ import { parseDasha, type DashManifest } from "./getPlaybackInfo.dasha.native";
 
 import type { PlaybackInfoResponse } from "../classes/TidalApi";
 import { TidalApi } from "../classes/TidalApi";
-import { libTrace } from "../index.safe";
 
 import type { AudioQuality, ItemId } from "../redux";
 
@@ -27,25 +26,21 @@ interface DashPlaybackInfo extends PlaybackInfoBase {
 }
 export type PlaybackInfo = DashPlaybackInfo | TidalPlaybackInfo;
 
-export const getPlaybackInfo = async (mediaItemId: ItemId, audioQuality: AudioQuality): Promise<PlaybackInfo> => {
-	try {
-		const playbackInfo = await TidalApi.playbackInfo(mediaItemId, audioQuality);
-		if (playbackInfo === undefined) throw new Error(`Playback info not found for ${mediaItemId}`);
+export const getPlaybackInfo = async (mediaItemId: ItemId, audioQuality: AudioQuality): Promise<PlaybackInfo | undefined> => {
+	const playbackInfo = await TidalApi.playbackInfo(mediaItemId, audioQuality);
+	if (playbackInfo === undefined) return undefined;
 
-		switch (playbackInfo.manifestMimeType) {
-			case "application/vnd.tidal.bts": {
-				const manifest: TidalManifest = JSON.parse(atob(playbackInfo.manifest));
-				return { ...playbackInfo, manifestMimeType: playbackInfo.manifestMimeType, manifest, mimeType: manifest.mimeType };
-			}
-			case "application/dash+xml": {
-				const manifest = await parseDasha(atob(playbackInfo.manifest), "https://sp-ad-cf.audio.tidal.com");
-				return { ...playbackInfo, manifestMimeType: playbackInfo.manifestMimeType, manifest, mimeType: "audio/mp4" };
-			}
-			default: {
-				throw new Error(`Unsupported Stream Info manifest mime type: ${playbackInfo.manifestMimeType}`);
-			}
+	switch (playbackInfo.manifestMimeType) {
+		case "application/vnd.tidal.bts": {
+			const manifest: TidalManifest = JSON.parse(atob(playbackInfo.manifest));
+			return { ...playbackInfo, manifestMimeType: playbackInfo.manifestMimeType, manifest, mimeType: manifest.mimeType };
 		}
-	} catch (e) {
-		return libTrace.err.withContext("getPlaybackInfo", mediaItemId, audioQuality).throw(e);
+		case "application/dash+xml": {
+			const manifest = await parseDasha(atob(playbackInfo.manifest), "https://sp-ad-cf.audio.tidal.com");
+			return { ...playbackInfo, manifestMimeType: playbackInfo.manifestMimeType, manifest, mimeType: "audio/mp4" };
+		}
+		default: {
+			throw new Error(`Unsupported Stream Info manifest mime type: ${playbackInfo.manifestMimeType}`);
+		}
 	}
 };
