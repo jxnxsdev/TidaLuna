@@ -2,7 +2,7 @@
 stdenv.mkDerivation (finalAttrs: rec {
   name = "TidaLuna";
   pname = "${name}";
-  version = "1.8.2-beta";
+  version = "1.8.3-beta";
   src = ./..;
 
   nativeBuildInputs = [
