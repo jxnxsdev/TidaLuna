@@ -182,6 +182,27 @@ export class PlayState {
 				}
 			}
 		});
+
+		// Preserve current track when clearing queue
+		let blockAutoPlay = false;
+		const playActions = ["playbackControls/PLAY", "mix/PLAY_MIX", "playQueue/ADD_NOW", "playQueue/ADD_TRACK_LIST_TO_PLAY_QUEUE"] as const;
+		for (const action of playActions) {
+			redux.intercept(action, unloads, () => blockAutoPlay);
+		}
+
+		redux.intercept("playQueue/CLEAR_QUEUE", unloads, () => {
+			const { elements, currentIndex } = this.playQueue;
+			const currentElement = elements[currentIndex];
+			if (!currentElement) return;
+
+			blockAutoPlay = true;
+			redux.actions["playbackControls/STOP"]();
+			redux.actions["view/HIDE_PLAY_QUEUE_ASIDE"]();
+			redux.actions["playQueue/RESET"]({ elements: [currentElement], currentIndex: 0 });
+			setTimeout(() => (blockAutoPlay = false), 1000);
+
+			return true;
+		});
 	}
 
 	private static currentMediaItem?: MediaItem;
