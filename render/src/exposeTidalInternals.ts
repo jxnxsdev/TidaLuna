@@ -29,7 +29,7 @@ const dynamicResolve: QuartzPlugin["dynamicResolve"] = async ({ name, moduleId, 
 	if (tidalModules[path]) return tidalModules[path];
 
 	// If already loading, wait for the same promise instead of reloading
-	if (pendingModules[path]) return pendingModules[path];
+	if (path in pendingModules) return pendingModules[path];
 
 	messageContainer.innerText += `Loading ${path}\n`;
 	loading++;

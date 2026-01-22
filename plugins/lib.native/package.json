@@ -8,11 +8,6 @@
 	},
 	"exports": "./src/index.native.ts",
 	"dependencies": {
-		"adm-zip": "^0.5.16",
-		"flac-stream-tagger": "^1.0.10",
-		"type-fest": "^5.0.1"
-	},
-	"devDependencies": {
-		"@types/adm-zip": "^0.5.7"
+		"flac-stream-tagger": "^1.0.10"
 	}
 }

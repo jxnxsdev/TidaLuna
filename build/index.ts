@@ -18,7 +18,7 @@ export const defaultBuildOptions: BuildOptions = {
 export const TidalNodeVersion = "node20.15"; // Tidal node version
 export const TidalChromeVersion = "chrome126"; // Tidal target version
 
-const externals = ["@luna/*", "oby", "react", "react-dom/client", "react/jsx-runtime", "electron", "path"];
+const externals = ["@luna/*", "oby", "react", "react-dom/client", "react/jsx-runtime", "electron"];
 
 export const pluginBuildOptions = async (pluginPath: string, opts?: BuildOptions) => {
 	const pkgPath = path.join(pluginPath, "package.json");
@@ -27,10 +27,9 @@ export const pluginBuildOptions = async (pluginPath: string, opts?: BuildOptions
 	const pkgName = pluginPackage.name;
 	const safeName = pkgName.replace(/@/g, "").replace(/\//g, ".");
 	// Handle exports being either a string or an object with "." or "default" entry
-	const exportsValue = typeof pluginPackage.exports === "string" 
-		? pluginPackage.exports 
-		: pluginPackage.exports?.["."]?.default ?? pluginPackage.exports?.["."];
-	const entryPoint = path.join(pluginPath, pluginPackage.main ?? exportsValue ?? "index.mjs");	
+	const exportsValue =
+		typeof pluginPackage.exports === "string" ? pluginPackage.exports : (pluginPackage.exports?.["."]?.default ?? pluginPackage.exports?.["."]);
+	const entryPoint = path.join(pluginPath, pluginPackage.main ?? exportsValue ?? "index.mjs");
 	return <BuildOptions>{
 		...defaultBuildOptions,
 		write: false,

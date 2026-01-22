@@ -17,22 +17,37 @@ export const lunaNativePlugin = (pluginEntryPoint: string, pkgName: string): Plu
 				sourcemap: false,
 				platform: "node",
 				target: TidalNodeVersion, // Tidal node version
-				format: "esm",
+				format: "cjs",
 				external: ["@luna/*", "electron", "./app/package.json", "./original.asar/*"],
 				plugins: [
 					fileUrlPlugin,
 					dynamicExternalsPlugin({
 						moduleContents: (module: string) => `
-							module.exports = globalThis.luna.modules["${module}"];
-							if (module.exports === undefined) throw new Error("Cannot find native module ${module} in globalThis.luna.modules");
+							module.exports = luna.modules["${module}"];
+							if (module.exports === undefined) throw new Error("Cannot find native module ${module} in luna.modules");
 							// Super icky, but lmao it works...
-							globalThis.luna.tidalWindow.webContents.send("__Luna.LunaPlugin.addDependant", "${module}", "${pkgName}");
+							luna.tidalWindow?.webContents?.send("__Luna.LunaPlugin.addDependant", "${module}", "${pkgName}")
 						`,
 						// Override externals as we dont want to dyanmic resolve electron or ./original.asar etc
 						externals: ["@luna/*"],
 					}),
 				],
 			});
+
+			const esmBuild = await esBuild({
+				...defaultBuildOptions,
+				entryPoints: [args.path],
+				write: false,
+				metafile: true,
+				bundle: true,
+				platform: "node",
+				format: "esm",
+				external: ["@luna/*", "electron", "./app/package.json", "./original.asar/*"],
+			});
+
+			// Extract the export names from the ESM metadata
+			const esmOutput = Object.values(esmBuild.metafile!.outputs).find((o) => o.entryPoint);
+			const exportNames = esmOutput?.exports || [];
 
 			const output = Object.values(metafile!.outputs)[0];
 
@@ -49,7 +64,7 @@ export const lunaNativePlugin = (pluginEntryPoint: string, pkgName: string): Plu
 					if (channel === undefined) throw new Error("Failed to register native module ${entryPoint}");
 
 					// Expose built exports to plugin
-					${output.exports
+					${exportNames
 						.map((_export) => {
 							return `export ${_export === "default" ? "default" : `const ${_export}`} = (...args) => __ipcRenderer.invoke(channel, "${_export}", ...args);`;
 						})

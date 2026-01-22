@@ -7,19 +7,20 @@ type GitHubRelease = components["schemas"]["release"];
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 
-import { getPackage, relaunch, updateLuna } from "@luna/lib.native";
+import { pkg, relaunch, update } from "plugins/lib.native/src/index.native";
+
+export const version = (await pkg()).version;
 
 import { useConfirm } from "material-ui-confirm";
 import { LunaButton, LunaSettings, SpinningButton } from "../../components";
 
-export const pkg = await getPackage();
 export const fetchReleases = () => ftch.json<GitHubRelease[]>("https://api.github.com/repos/Inrixia/TidaLuna/releases");
 
 export const LunaClientUpdate = React.memo(() => {
 	const confirm = useConfirm();
 	const [releases, setReleases] = React.useState<GitHubRelease[]>([]);
 	const [loading, setLoading] = React.useState(false);
-	const [selectedRelease, setSelectedRelease] = React.useState<string>(pkg.version!);
+	const [selectedRelease, setSelectedRelease] = React.useState<string>(version!);
 
 	const updateReleases = async () => {
 		setLoading(true);
@@ -34,7 +35,7 @@ export const LunaClientUpdate = React.memo(() => {
 
 	let action;
 	let desc;
-	if (selectedRelease !== pkg.version) {
+	if (selectedRelease !== version) {
 		action = "Update Client";
 		desc = `Update to ${selectedRelease}? You will need to restart the client.`;
 	} else {
@@ -68,7 +69,7 @@ export const LunaClientUpdate = React.memo(() => {
 					if (!result.confirmed) return;
 					const releaseUrl = releases.find((r) => r.tag_name === selectedRelease)?.assets[0].browser_download_url;
 					if (releaseUrl === undefined) throw new Error("Release URL not found");
-					await updateLuna(releaseUrl);
+					await update(releaseUrl);
 				}}
 			/>
 			<LunaButton

@@ -1,5 +1,2 @@
-export const startNativeDebugging = async () => {
-	// @ts-expect-error This exists
-	process._debugProcess(process.pid);
-	return process.debugPort;
-};
+// @ts-expect-error This exists
+export const startNativeDebugging = async () => process.debugProcess();

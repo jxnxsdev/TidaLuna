@@ -51,13 +51,25 @@ importers:
 
   native:
     dependencies:
+      adm-zip:
+        specifier: ^0.5.16
+        version: 0.5.16
+      fflate:
+        specifier: ^0.8.2
+        version: 0.8.2
       mime:
         specifier: ^4.1.0
         version: 4.1.0
     devDependencies:
+      '@types/adm-zip':
+        specifier: ^0.5.7
+        version: 0.5.7
       electron:
         specifier: ^38.2.0
         version: 38.7.2
+      type-fest:
+        specifier: ^5.0.1
+        version: 5.3.0
 
   plugins/dev:
     dependencies:
@@ -92,19 +104,9 @@ importers:
 
   plugins/lib.native:
     dependencies:
-      adm-zip:
-        specifier: ^0.5.16
-        version: 0.5.16
       flac-stream-tagger:
         specifier: ^1.0.10
         version: 1.0.10
-      type-fest:
-        specifier: ^5.0.1
-        version: 5.3.0
-    devDependencies:
-      '@types/adm-zip':
-        specifier: ^0.5.7
-        version: 0.5.7
 
   plugins/ui:
     dependencies:
@@ -841,6 +843,9 @@ packages:
 
   fd-slicer@1.1.0:
     resolution: {integrity: sha512-cE1qsB/VwyQozZ+q1dGxR8LBYNZeofhEdUNGSMbQD3Gw2lAzX9Zb3uIU6Ebc/Fmyjo9AWWfnn0AUCHqtevs/8g==}
+
+  fflate@0.8.2:
+    resolution: {integrity: sha512-cPJU47OaAoCbg0pBvzsgpTPhmhqI5eJjh/JIu8tPj5q+T7iLvW/JAYUqmE7KOB4R1ZyEhzBaIQpQpardBF5z8A==}
 
   file-type@21.1.1:
     resolution: {integrity: sha512-ifJXo8zUqbQ/bLbl9sFoqHNTNWbnPY1COImFfM6CCy7z+E+jC1eY9YfOKkx0fckIg+VljAy2/87T61fp0+eEkg==}
@@ -2007,6 +2012,8 @@ snapshots:
   fd-slicer@1.1.0:
     dependencies:
       pend: 1.2.0
+
+  fflate@0.8.2: {}
 
   file-type@21.1.1:
     dependencies:

@@ -1,6 +1,6 @@
 import { parseStream, type IAudioMetadata } from "music-metadata";
 
-import { fetchMediaItemStream, type FetchProgress } from "@luna/lib.native";
+import { fetchMediaItemStream, type FetchProgress } from "plugins/lib.native/src/index.native";
 
 import type { PlaybackInfo } from "../../helpers";
 

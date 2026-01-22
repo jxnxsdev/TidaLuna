@@ -4,7 +4,7 @@ import { createWriteStream } from "fs";
 import { access, constants, mkdir } from "fs/promises";
 import { join, parse } from "path";
 
-import { fetchMediaItemStream, type FetchProgress } from "@luna/lib.native";
+import { fetchMediaItemStream, type FetchProgress } from "plugins/lib.native/src/index.native";
 
 // Type import & native space so not a issue
 import type { redux } from "@luna/lib";
@@ -25,10 +25,11 @@ const fileExists = async (path: string): Promise<boolean> => {
 const downloads: Record<redux.ItemId, { progress: FetchProgress; promise: Promise<void> } | undefined> = {};
 export const downloadProgress = async (trackId: redux.ItemId) => downloads[trackId]?.progress;
 const downloadSema = new Semaphore(1);
-export const download = async (playbackInfo: PlaybackInfo, path: string, tags?: MetaTags): Promise<void> =>
+export const download = async (playbackInfo: PlaybackInfo, path: string | string[], tags?: MetaTags): Promise<void> =>
 	downloadSema.with(async () => {
 		if (downloads[playbackInfo.trackId] !== undefined) return downloads[playbackInfo.trackId]!.promise;
 		try {
+			if (Array.isArray(path)) path = join(...path);
 			// Dont download if file already exists
 			if (await fileExists(path)) return;
 			const parsedPath = parse(path);

@@ -1,7 +1,7 @@
 import { type BuildOptions, type PluginBuild } from "esbuild";
 import { defaultBuildOptions, listen, TidalNodeVersion } from "luna/build";
 
-import { mkdir, readFile, writeFile, cp } from "fs/promises";
+import { mkdir, readFile, writeFile } from "fs/promises";
 
 const packageJsonPlugin = {
 	name: "write-package-json",
@@ -30,7 +30,7 @@ const buildConfigs: BuildOptions[] = [
 		outfile: "dist/preload.mjs",
 		platform: "node",
 		target: TidalNodeVersion,
-		format: "esm",
+		format: "cjs",
 		external: ["electron"],
 		plugins: [packageJsonPlugin],
 	},

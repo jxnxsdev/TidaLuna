@@ -1,8 +1,5 @@
-import { unloadableEmitter, type AnyFn } from "@inrixia/helpers";
+import { sleep, unloadableEmitter, type AnyFn } from "@inrixia/helpers";
 import { contextBridge, ipcRenderer, webFrame } from "electron";
-import { createRequire } from "module";
-
-import path from "path";
 
 const ipcRendererUnloadable = unloadableEmitter(ipcRenderer, null, "ipcRenderer");
 
@@ -22,8 +19,6 @@ expose("__ipcRenderer", {
 	on: (channel: string, listener: AnyFn) => ipcRendererUnloadable.onU(null, channel, (_, ...args) => listener(...args)),
 	once: (channel: string, listener: AnyFn) => ipcRendererUnloadable.onceU(null, channel, (_, ...args) => listener(...args)),
 });
-// Expose path module
-expose("path", path);
 
 type ConsoleMethodName = {
 	[K in keyof Console]: Console[K] extends (...args: any[]) => any ? K : never;
@@ -69,12 +64,11 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 			})()`,
 			true,
 		);
+		await sleep(0);
+		eval(await ipcRenderer.invoke("__Luna.originalPreload"));
 	} catch (err) {
 		ipcRenderer.invoke("__Luna.preloadErr", err);
 		throw err;
 	}
 	console.log(`[Luna.preload] luna.js loaded!`);
 })();
-
-// require() the original Tidal preload script
-ipcRenderer.invoke("__Luna.originalPreload").then(createRequire(import.meta.url));

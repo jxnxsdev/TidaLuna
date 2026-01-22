@@ -27,3 +27,7 @@ if (storage.logReduxEvents)
 export { Settings } from "./Settings";
 
 export { getNativeIPCEvents, getRenderIPCEvents } from "./ipc.native";
+
+export { startNativeDebugging } from "./debug.native";
+export { startNativeIPCLog, stopNativeIPCLog } from "./ipc";
+export { startRenderIpcLog, stopRenderIpcLog } from "./ipc.native";
