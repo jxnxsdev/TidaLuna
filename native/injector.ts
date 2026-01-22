@@ -122,14 +122,14 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		if (isTidalWindow) {
 			// Store original preload and add a handle to fetch it later (see ./preload.ts)
 			const origialPreload = options.webPreferences?.preload;
-			ipcHandle("__Luna.originalPreload", () => origialPreload);
+			ipcHandle("__Luna.originalPreload", async () => (await readFile(origialPreload)).toString());
 
 			// Replace the preload instead of using setPreloads because of some differences in internal behaviour.
 			// Set preload script to Luna's
 			options.webPreferences.preload = path.join(bundleDir, "preload.mjs");
 
 			// TODO: Find why sandboxing has to be disabled
-			options.webPreferences.sandbox = false;
+			options.webPreferences.sandbox = true;
 		}
 
 		const window = new target(options);

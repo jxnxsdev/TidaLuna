@@ -7,7 +7,9 @@ type GitHubRelease = components["schemas"]["release"];
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 
-import { pkg, relaunch, update } from "@luna/lib.native";
+import { pkg, relaunch, update } from "plugins/lib.native/src/index.native";
+
+export const version = await pkg().version;
 
 import { useConfirm } from "material-ui-confirm";
 import { LunaButton, LunaSettings, SpinningButton } from "../../components";
@@ -18,7 +20,7 @@ export const LunaClientUpdate = React.memo(() => {
 	const confirm = useConfirm();
 	const [releases, setReleases] = React.useState<GitHubRelease[]>([]);
 	const [loading, setLoading] = React.useState(false);
-	const [selectedRelease, setSelectedRelease] = React.useState<string>(pkg.version!);
+	const [selectedRelease, setSelectedRelease] = React.useState<string>(version!);
 
 	const updateReleases = async () => {
 		setLoading(true);
@@ -33,7 +35,7 @@ export const LunaClientUpdate = React.memo(() => {
 
 	let action;
 	let desc;
-	if (selectedRelease !== pkg.version) {
+	if (selectedRelease !== version) {
 		action = "Update Client";
 		desc = `Update to ${selectedRelease}? You will need to restart the client.`;
 	} else {

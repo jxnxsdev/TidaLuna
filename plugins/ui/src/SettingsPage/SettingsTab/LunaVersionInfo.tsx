@@ -1,11 +1,9 @@
 import React, { useState } from "react";
 import { LunaSettings } from "../../components";
-import { LunaClientUpdate } from "./LunaClientUpdate";
-
-import { pkg as currentPkg } from "@luna/lib.native";
+import { LunaClientUpdate, version } from "./LunaClientUpdate";
 
 export const LunaVersionInfo = React.memo(() => {
-	const [pkg, setPkg] = useState<{ version?: string }>(currentPkg);
+	const [_version, setVersion] = useState<string | undefined>(version);
 
 	return (
 		<div style={{ display: "flex", flexDirection: "column" }}>
@@ -19,7 +17,7 @@ export const LunaVersionInfo = React.memo(() => {
 					<div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
 						<h2>Thanks for using TIDALuna!</h2>
 						<div style={{ fontSize: 18, margin: 0 }}>
-							<strong>Version:</strong> <span style={{ color: "#31d8ff" }}>{pkg.version || "Unknown"}</span>
+							<strong>Version:</strong> <span style={{ color: "#31d8ff" }}>{version || "Unknown"}</span>
 						</div>
 					</div>
 				</div>

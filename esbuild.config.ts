@@ -30,7 +30,7 @@ const buildConfigs: BuildOptions[] = [
 		outfile: "dist/preload.mjs",
 		platform: "node",
 		target: TidalNodeVersion,
-		format: "esm",
+		format: "cjs",
 		external: ["electron"],
 		plugins: [packageJsonPlugin],
 	},

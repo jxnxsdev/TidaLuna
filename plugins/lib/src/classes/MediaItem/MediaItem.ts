@@ -399,21 +399,23 @@ export class MediaItem extends ContentBase {
 	// #endregion
 
 	// #region PlaybackInfo
-	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo | undefined> = memoize(async (audioQuality?: redux.AudioQuality) => {
-		audioQuality ??= Quality.Max.audioQuality;
-		const playbackInfo = await getPlaybackInfo(this.id, audioQuality);
-		if (!playbackInfo) return undefined;
-		const [_, emitFormat] = this.formatEmitters[audioQuality] ?? [];
-		this.cache.format ??= {};
-		this.cache.format[audioQuality] = {
-			...this.cache.format[audioQuality],
-			bitDepth: playbackInfo.bitDepth,
-			sampleRate: playbackInfo.sampleRate,
-		};
-		this.cache.actualAudioQuality = playbackInfo.audioQuality;
-		emitFormat?.(this.cache.format[audioQuality]!, this.trace.err.withContext("playbackInfo.emitFormat"));
-		return playbackInfo;
-	});
+	public playbackInfo: (audioQuality?: redux.AudioQuality) => Promise<PlaybackInfo | undefined> = memoize(
+		async (audioQuality?: redux.AudioQuality) => {
+			audioQuality ??= Quality.Max.audioQuality;
+			const playbackInfo = await getPlaybackInfo(this.id, audioQuality);
+			if (!playbackInfo) return undefined;
+			const [_, emitFormat] = this.formatEmitters[audioQuality] ?? [];
+			this.cache.format ??= {};
+			this.cache.format[audioQuality] = {
+				...this.cache.format[audioQuality],
+				bitDepth: playbackInfo.bitDepth,
+				sampleRate: playbackInfo.sampleRate,
+			};
+			this.cache.actualAudioQuality = playbackInfo.audioQuality;
+			emitFormat?.(this.cache.format[audioQuality]!, this.trace.err.withContext("playbackInfo.emitFormat"));
+			return playbackInfo;
+		},
+	);
 	// #endregion
 
 	// #region Download
@@ -489,7 +491,7 @@ export class MediaItem extends ContentBase {
 		emitFormat?.(format, this.trace.err.withContext("updateFormat.emitFormat"));
 
 		// Emit to originally requested quality if different
-		if (requestedQuality !== playbackInfo.audioQuality) {
+		if (requestedQuality && requestedQuality !== playbackInfo.audioQuality) {
 			const [_, emitRequested] = this.formatEmitters[requestedQuality] ?? [];
 			emitRequested?.(format, this.trace.err.withContext("updateFormat.emitFormat.requested"));
 		}
