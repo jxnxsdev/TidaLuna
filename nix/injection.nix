@@ -1,5 +1,10 @@
-{ stdenv, nodejs, pnpm, ... }:
-stdenv.mkDerivation (finalAttrs: rec {
+{
+  stdenv,
+  nodejs,
+  pnpm,
+  ...
+}:
+stdenv.mkDerivation (rec {
   name = "TidaLuna";
   pname = "${name}";
   version = "1.9.2-beta";
@@ -11,7 +16,7 @@ stdenv.mkDerivation (finalAttrs: rec {
   ];
 
   pnpmDeps = pnpm.fetchDeps {
-    inherit (finalAttrs) pname src version;
+    inherit pname src version;
     fetcherVersion = 1;
     hash = "sha256-AIY3AxV1kzUQgTsGOS++FxHSnbILwi42pSE7s5xXZgo=";
   };

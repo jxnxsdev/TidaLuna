@@ -1,29 +1,29 @@
 {
+  description = "Injection for TIDAL";
+
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixpkgs-unstable";
-    systems.url = "github:nix-systems/default";
-    devenv.url = "github:cachix/devenv";
   };
 
-  outputs = inputs@{ self, systems, flake-parts, nixpkgs, ... }: flake-parts.lib.mkFlake { inherit inputs; } {
-    systems = import systems;
+  outputs =
+    { self, nixpkgs }:
+    let
+      forAllSystems =
+        function:
+        nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed (
+          system: function nixpkgs.legacyPackages.${system}
+        );
+    in
+    {
+    packages = forAllSystems (pkgs: {
+      injection = pkgs.callPackage ./nix/injection.nix { };
+      default = pkgs.callPackage ./nix/overlay.nix { };
+    });
 
-    imports = [
-      ./nix
-      inputs.devenv.flakeModule
-    ];
+    devShells = forAllSystems (pkgs: {
+      default = pkgs.callPackage ./shell.nix { };
+    });
 
-    perSystem = { config, pkgs, system, ... }: {
-      _module.args.pkgs = import inputs.nixpkgs {
-        inherit system;
-        config.allowUnfree = true;
-        overlays = [ self.overlays.default ];
-      };
-
-      packages.injection =
-       pkgs.callPackage ./nix/package.nix { inherit (pkgs) nodejs fetchFromGitHub; pnpm = pkgs.pnpm_9; };
-
-      packages.default = pkgs.tidaLuna;
-    };
+    overlays.default = final: _: { tidal-luna = final.callPackage ./nix/overlay.nix { }; };
   };
 }
