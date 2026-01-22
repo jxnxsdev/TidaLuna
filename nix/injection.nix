@@ -4,10 +4,14 @@
   pnpm,
   ...
 }:
+let
+  package = builtins.fromJSON (builtins.readFile ../package.json);
+in
 stdenv.mkDerivation (rec {
   name = "TidaLuna";
   pname = "${name}";
-  version = "1.9.7-beta";
+
+  version = package.version;
   src = ./..;
 
   nativeBuildInputs = [

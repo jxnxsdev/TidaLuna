@@ -8,15 +8,15 @@
   prettierd,
 }:
 let
-  defaultPackage = callPackage ./nix/overlay.nix { };
-  injection = callPackage ./nix/injection.nix { };
+  defaultPackage = callPackage ./overlay.nix { };
+  injection = callPackage ./injection.nix { };
 in
 mkShellNoCC {
+  # load the overlay of tidal-hifi & the stand-alone injection
   inputsFrom = [
     defaultPackage
     injection
   ];
-
 
   # Get all required packages for this project
   packages = [
