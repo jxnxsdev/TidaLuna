@@ -177,7 +177,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			const cleanName = moduleID.replace(/^node:/, "");
 
 			if (DANGER_ZONE_MODULES.some((prefix) => cleanName === prefix || cleanName.startsWith(prefix)) || PathsRegex.test(cleanName)) {
-				console.error(`[🛑Security🛑] == ${fileName} loading "${cleanName}"`);
+				console.warn(`[🛑Security🛑] "${fileName}" is loading "${cleanName}"`);
 
 				// --- SPECIAL LOGIC FOR FS ---
 				if (cleanName === "fs" || cleanName === "fs/promises") {
@@ -190,9 +190,9 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 						if ((typeof value !== "object" || value === null) && typeof value !== "function") return value;
 						return new Proxy(value, {
 							apply: (fnTarget, fnThis, fnArgs) => {
-								console.log(`[🛑Security🛑] == Intercepting CALL to "${path}" for "${fileName}"`);
+								if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" in "${fileName}"`);
 
-								if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" for "${fileName}"`);
+								console.warn(`[🛑Security🛑] "${fileName}" is executing "${path}"`);
 								return fnTarget.apply(fnThis, fnArgs);
 							},
 							get: (objTarget, prop, receiver) => {
@@ -207,7 +207,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 					};
 					return deepProxy(realModule, cleanName);
 				}
-				if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked loading of module "${cleanName}" for "${fileName}"`);
+				if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked loading "${cleanName}" in "${fileName}"`);
 			}
 
 			return target.apply(thisArg, argumentsList);
@@ -220,8 +220,8 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 
 	const WebAssembly = new Proxy(globalThis.WebAssembly, {
 		get(target, prop, receiver) {
-			console.error(`[🛑Security🛑] == ${fileName} loading WebAssembly (${String(prop)})!`);
-			if (!trust(fileName, "WebAssembly")) throw new Error(`Access Denied! User blocked "WebAssembly" for "${fileName}"`);
+			console.warn(`[🛑Security🛑] "${fileName}" is loading WebAssembly (${String(prop)})!`);
+			if (!trust(fileName, "WebAssembly")) throw new Error(`Access Denied! User blocked "WebAssembly" in "${fileName}"`);
 			return Reflect.get(target, prop, receiver);
 		},
 	});
