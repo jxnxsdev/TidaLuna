@@ -19,9 +19,7 @@ export const update = async (zipUrl: string) => {
 	const res = await fetch(zipUrl);
 	if (!res.ok) throw new Error(`Failed to download ${zipUrl}\n${res.statusText}`);
 
-	const testPath = path.join(process.resourcesPath, "test");
 	// Ensure clean start
-	await mkdir(testPath, { recursive: true });
 
 	console.log(`[UPDATER] == Downloaded: ${zipUrl}`);
 
@@ -31,6 +29,7 @@ export const update = async (zipUrl: string) => {
 	console.log("[UPDATER] == Loaded zip into memory");
 
 	await clearAppFolder();
+	await mkdir(appFolder, { recursive: true });
 
 	console.log("[UPDATER] == Cleared app folder");
 
@@ -38,10 +37,10 @@ export const update = async (zipUrl: string) => {
 	const entries = Object.keys(zip.files);
 	for (const filename of entries) {
 		const file = zip.files[filename];
-		const destPath = path.join(testPath, filename);
+		const destPath = path.join(appFolder, filename);
 
 		// Security: Prevent Zip Slip (directory traversal attacks)
-		if (!destPath.startsWith(testPath)) {
+		if (!destPath.startsWith(appFolder)) {
 			console.warn(`[UPDATER] == Skipping unsafe path: ${filename}`);
 			continue;
 		}
