@@ -185,6 +185,7 @@ export class PlayState {
 
 		// Preserve current track when clearing queue
 		let blockAutoPlay = false;
+		let blockTimeout: ReturnType<typeof setTimeout> | undefined;
 		const playActions = ["playbackControls/PLAY", "mix/PLAY_MIX", "playQueue/ADD_NOW", "playQueue/ADD_TRACK_LIST_TO_PLAY_QUEUE"] as const;
 		for (const action of playActions) {
 			redux.intercept(action, unloads, () => blockAutoPlay);
@@ -196,10 +197,11 @@ export class PlayState {
 			if (!currentElement) return;
 
 			blockAutoPlay = true;
+			clearTimeout(blockTimeout);
 			redux.actions["playbackControls/STOP"]();
 			redux.actions["view/HIDE_PLAY_QUEUE_ASIDE"]();
 			redux.actions["playQueue/RESET"]({ elements: [currentElement], currentIndex: 0 });
-			setTimeout(() => (blockAutoPlay = false), 1000);
+			blockTimeout = setTimeout(() => (blockAutoPlay = false), 1000);
 
 			return true;
 		});
