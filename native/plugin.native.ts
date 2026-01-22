@@ -112,47 +112,46 @@ const sandbox = {
 	luna,
 };
 
-const DANGER_ZONE: Record<string, string> = {
-	// The Filesystem
-	fs: "Read, write and delete any files on this computer",
-	"fs/promises": "Read, write and delete any files on this computer",
+const DANGER_GROUPS = {
+	EXECUTION: "Execute external system commands & run background processes unrestricted with full system level access",
+	FILESYSTEM: "Full read/write/delete access to your filesystem for all files",
+	INTERNALS: "Modify the V8 engine, access internal debugging tools, or dynamically execute unverified code strings",
+	ENVIRONMENT: "Access sensitive system info (OS users, ENV variables), control the current process, or manage application windows.",
+} as const;
 
-	// System Commands
-	child_process: "Run system commands (terminal) and external programs (system-level access)",
-
-	// Background Processing (The ones you asked about)
-	worker_threads: "Run heavy processing tasks in the background (system-level access)",
-	cluster: "Create multiple system processes to handle heavy workloads (system-level access)",
-
-	// Electron / App Control
-	electron: "Control the application window and clipboard",
-	os: "Access system information (Username, Home Directory, Network IP)",
-	process: "Access environment variables and control the current process",
-
-	// Advanced Internals
-	inspector: "Access internal debugging tools",
-	v8: "Modify the javascript engine directly (highly suspicious)",
-	vm: "Run unverified code that tries to bypass security rules",
-
-	// WebAssembly
-	wasi: "System-level access via WebAssembly",
-	WebAssembly: "Execute compiled binary code (System-level access)",
-
-	// Imports
-	".": "Load local or system files",
-	"file://": "Read local or system files",
-};
-const DANGER_ZONE_MODULES = Object.keys(DANGER_ZONE);
 const PathsRegex = /^([a-zA-Z]:|[\\/])/;
+const isUnsafe = (moduleName: string) => {
+	const cleanName = moduleName.replace(/^node:/, "");
+	switch (cleanName) {
+		case "child_process":
+		case "worker_threads":
+		case "cluster":
+		case "wasi":
+		case "WebAssembly":
+			return DANGER_GROUPS.EXECUTION;
+		case "fs":
+		case "fs/promises":
+			return DANGER_GROUPS.FILESYSTEM;
+		case "vm":
+		case "v8":
+		case "inspector":
+		case "module":
+			return DANGER_GROUPS.INTERNALS;
+		case "os":
+		case "process":
+		case "electron":
+			return DANGER_GROUPS.ENVIRONMENT;
+	}
+	if (cleanName.startsWith(".") || cleanName.startsWith("file://") || PathsRegex.test(cleanName)) return DANGER_GROUPS.FILESYSTEM;
+};
 
 const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
 
 const trusted: Record<string, Set<string>> = {};
-const trust = (fileName: string, moduleName: string): boolean => {
+const trust = (fileName: string, moduleName: string, desc: string): boolean => {
 	if (moduleName === "./app/package.json") return true;
 
-	if (moduleName === "fs/promises") moduleName = "fs";
-	if (trusted[fileName]?.has(moduleName)) return true;
+	if (trusted[fileName]?.has(desc)) return true;
 	const win = BrowserWindow.getFocusedWindow();
 	const responseIndex = dialog.showMessageBoxSync(win!, {
 		type: "question",
@@ -161,14 +160,14 @@ const trust = (fileName: string, moduleName: string): boolean => {
 		cancelId: 1,
 		title: "Security Verification",
 		message: "Allow Native Code Execution?",
-		detail: `Plugin: ${fileName}\nModule: ${moduleName}\nDescription: ${DANGER_ZONE[moduleName]}\n\nDo you want to allow this plugin to use this module?`,
+		detail: `Plugin: ${fileName}\nModule: ${moduleName}\nDescription: ${desc}\n\nDo you want to allow this plugin to use this module?`,
 		noLink: true,
 		normalizeAccessKeys: true,
 	});
 	// Allow
 	if (responseIndex === 0) {
 		trusted[fileName] ??= new Set<string>();
-		trusted[fileName].add(moduleName);
+		trusted[fileName].add(desc);
 		return true;
 	}
 	return false;
@@ -178,9 +177,11 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 	const require = new Proxy(nativeRequire, {
 		apply: (target, thisArg, argumentsList: [id: string]) => {
 			const [moduleID] = argumentsList;
+
 			const cleanName = moduleID.replace(/^node:/, "");
 
-			if (DANGER_ZONE_MODULES.some((prefix) => cleanName === prefix || cleanName.startsWith(prefix)) || PathsRegex.test(cleanName)) {
+			const unsafeDesc = isUnsafe(cleanName);
+			if (unsafeDesc) {
 				console.warn(`[🛑Security🛑] "${fileName}" is loading "${cleanName}"`);
 
 				// --- SPECIAL LOGIC FOR FS ---
@@ -194,7 +195,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 						if ((typeof value !== "object" || value === null) && typeof value !== "function") return value;
 						return new Proxy(value, {
 							apply: (fnTarget, fnThis, fnArgs) => {
-								if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" in "${fileName}"`);
+								if (!trust(fileName, cleanName, unsafeDesc)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" in "${fileName}"`);
 
 								console.warn(`[🛑Security🛑] "${fileName}" is executing "${path}"`);
 								return fnTarget.apply(fnThis, fnArgs);
@@ -211,7 +212,8 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 					};
 					return deepProxy(realModule, cleanName);
 				}
-				if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked loading "${cleanName}" in "${fileName}"`);
+
+				if (!trust(fileName, cleanName, unsafeDesc)) throw new Error(`Access Denied! User blocked loading "${cleanName}" in "${fileName}"`);
 			}
 
 			return target.apply(thisArg, argumentsList);
@@ -225,7 +227,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 	const WebAssembly = new Proxy(globalThis.WebAssembly, {
 		get(target, prop, receiver) {
 			console.warn(`[🛑Security🛑] "${fileName}" is loading WebAssembly (${String(prop)})!`);
-			if (!trust(fileName, "WebAssembly")) throw new Error(`Access Denied! User blocked "WebAssembly" in "${fileName}"`);
+			if (!trust(fileName, "WebAssembly", DANGER_GROUPS.EXECUTION)) throw new Error(`Access Denied! User blocked "WebAssembly" in "${fileName}"`);
 			return Reflect.get(target, prop, receiver);
 		},
 	});
@@ -259,10 +261,6 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			filename: `luna://${fileName}`,
 			timeout: 5000,
 			displayErrors: true,
-			importModuleDynamically: async (specifier, referrer, importAttributes) => {
-				console.error("WHAT THE FUCK!", specifier);
-				return import(specifier);
-			},
 		});
 
 		// Call the function with our sandboxed tools
