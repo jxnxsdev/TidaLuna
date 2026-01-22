@@ -12,8 +12,9 @@ import { confirm } from "./helpers/confirm";
 import { lunaMuiTheme } from "./lunaTheme";
 import { currentSettingsTab, LunaPage } from "./SettingsPage";
 import { storeUrls } from "./SettingsPage/PluginStoreTab";
-import { fetchReleases, pkg } from "./SettingsPage/SettingsTab/LunaClientUpdate";
+import { fetchReleases } from "./SettingsPage/SettingsTab/LunaClientUpdate";
 
+import { pkg } from "@luna/lib.native";
 import { unloads } from "./index.safe";
 
 export * from "./classes";

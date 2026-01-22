@@ -7,12 +7,11 @@ type GitHubRelease = components["schemas"]["release"];
 import MenuItem from "@mui/material/MenuItem";
 import Select from "@mui/material/Select";
 
-import { getPackage, relaunch, updateLuna } from "@luna/lib.native";
+import { pkg, relaunch, update } from "@luna/lib.native";
 
 import { useConfirm } from "material-ui-confirm";
 import { LunaButton, LunaSettings, SpinningButton } from "../../components";
 
-export const pkg = await getPackage();
 export const fetchReleases = () => ftch.json<GitHubRelease[]>("https://api.github.com/repos/Inrixia/TidaLuna/releases");
 
 export const LunaClientUpdate = React.memo(() => {
@@ -68,7 +67,7 @@ export const LunaClientUpdate = React.memo(() => {
 					if (!result.confirmed) return;
 					const releaseUrl = releases.find((r) => r.tag_name === selectedRelease)?.assets[0].browser_download_url;
 					if (releaseUrl === undefined) throw new Error("Release URL not found");
-					await updateLuna(releaseUrl);
+					await update(releaseUrl);
 				}}
 			/>
 			<LunaButton

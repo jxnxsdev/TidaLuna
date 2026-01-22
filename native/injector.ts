@@ -1,38 +1,21 @@
 import electron from "electron";
-import os from "os";
 
-import { readFile, rm, writeFile } from "fs/promises";
+import { readFile } from "fs/promises";
 import mime from "mime";
 
 import path from "path";
-import { fileURLToPath, pathToFileURL } from "url";
+import { fileURLToPath } from "url";
 
 import Module, { createRequire } from "module";
+
+import { ipcHandle } from "./ipc";
 
 const fontUrlRegex = /\.(woff2?|ttf|otf|eot)(\?.*)?$/i;
 
 // #region Bundle
 const bundleDir = process.env.TIDALUNA_DIST_PATH ?? path.dirname(fileURLToPath(import.meta.url));
 const tidalAppPath = path.join(process.resourcesPath, "original.asar");
-
-// Safe ipcHandler to ensure no duplicates
-const ipcHandle: (typeof Electron)["ipcMain"]["handle"] = (channel, listener) => {
-	electron.ipcMain.removeHandler(channel);
-	electron.ipcMain.handle(channel, listener);
-};
 // #endregion
-
-// Define globalThis.luna
-declare global {
-	var luna: {
-		modules: Record<string, any>;
-		tidalWindow?: Electron.BrowserWindow;
-	};
-}
-
-globalThis.luna = {
-	modules: {},
-};
 
 // Allow debugging from remote origins (e.g., Chrome DevTools over localhost)
 // Requires starting client with --remote-debugging-port=9222
@@ -149,7 +132,8 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 			options.webPreferences.sandbox = false;
 		}
 
-		const window = (luna.tidalWindow = new target(options));
+		const window = new target(options);
+		globalThis.luna.sendToRender = window.webContents.send;
 
 		// if we are on linux and this is the main tidal window,
 		// set the icon again after load (potential KDE quirk)
@@ -247,38 +231,11 @@ require(startPath);
 // #endregion
 
 // #region LunaNative
-const requirePrefix = `import { createRequire } from 'module';const require = createRequire(${JSON.stringify(pathToFileURL(process.resourcesPath + "/").href)});`;
-// Call to register native module
-ipcHandle("__Luna.registerNative", async (_, name: string, code: string) => {
-	const tempDir = os.tmpdir();
-	const tempFile = path.join(tempDir, Math.random().toString() + ".mjs");
-	try {
-		await writeFile(tempFile, requirePrefix + code, "utf8");
-
-		// Load module
-		const exports = (globalThis.luna.modules[name] = await import(pathToFileURL(tempFile).href));
-		const channel = `__LunaNative.${name}`;
-
-		// Register handler for calling module exports
-		ipcHandle(channel, async (_, exportName, ...args) => {
-			try {
-				return await exports[exportName](...args);
-			} catch (err: any) {
-				// Set cause to identify a native module
-				err.cause = `[Luna.native] (${name}).${exportName}`;
-				throw err;
-			}
-		});
-
-		return channel;
-	} finally {
-		await rm(tempFile, { force: true });
-	}
-});
+import "./plugin.native";
+// #endregion
 
 // Literally just to log if preload fails
 ipcHandle("__Luna.preloadErr", async (_, err: Error) => {
 	console.error(err);
 	electron.dialog.showErrorBox("TidaLuna", err.message);
 });
-// #endregion
