@@ -15,7 +15,8 @@ export const relaunch = async () => {
 
 const appFolder = path.join(process.resourcesPath, "app");
 
-export const update = async (zipUrl: string) => {
+export const update = async (version: string) => {
+	const zipUrl = `https://github.com/Inrixia/TidaLuna/releases/download/${version}/luna.zip`;
 	const res = await fetch(zipUrl);
 	if (!res.ok) throw new Error(`Failed to download ${zipUrl}\n${res.statusText}`);
 
