@@ -48,6 +48,8 @@ const mockProcess = {
 	stderr: createStreamMock(process.stderr),
 	stdout: createStreamMock(process.stdout),
 
+	resourcesPath: process.resourcesPath,
+
 	debugProcess: () => {
 		// @ts-expect-error This exists
 		process._debugProcess(process.pid);
@@ -147,6 +149,8 @@ const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").h
 
 const trusted: Record<string, Set<string>> = {};
 const trust = (fileName: string, moduleName: string): boolean => {
+	if (moduleName === "./app/package.json") return true;
+
 	if (moduleName === "fs/promises") moduleName = "fs";
 	if (trusted[fileName]?.has(moduleName)) return true;
 	const win = BrowserWindow.getFocusedWindow();
@@ -255,6 +259,10 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			filename: `luna://${fileName}`,
 			timeout: 5000,
 			displayErrors: true,
+			importModuleDynamically: async (specifier, referrer, importAttributes) => {
+				console.error("WHAT THE FUCK!", specifier);
+				return import(specifier);
+			},
 		});
 
 		// Call the function with our sandboxed tools
