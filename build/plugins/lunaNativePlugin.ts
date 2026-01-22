@@ -43,6 +43,7 @@ export const lunaNativePlugin = (pluginEntryPoint: string, pkgName: string): Plu
 				platform: "node",
 				format: "esm",
 				external: ["@luna/*", "electron", "./app/package.json", "./original.asar/*"],
+				plugins: [fileUrlPlugin],
 			});
 
 			// Extract the export names from the ESM metadata
