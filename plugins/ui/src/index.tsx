@@ -72,7 +72,7 @@ setTimeout(async () => {
 		.filter((release) => !release.prerelease)
 		.map((rel) => rel.tag_name)
 		.sort(semverRcompare)[0];
-	if (semverGt(latestReleaseTag, await pkg().version!, true)) {
+	if (semverGt(latestReleaseTag, (await pkg()).version!, true)) {
 		const res = await confirm({
 			title: (
 				<>

@@ -1,13 +1,13 @@
 import { app } from "electron";
 
 import { unzip } from "fflate";
-import { mkdir, readdir, rm, unlink, writeFile } from "fs/promises";
+import { mkdir, readdir, readFile, rm, unlink, writeFile } from "fs/promises";
 import path from "path";
 
 import type { PackageJson } from "type-fest";
 import { promisify } from "util";
 
-export const pkg: PackageJson = require("../package.json");
+export const pkg = async (): Promise<PackageJson> => readFile("./resources/app/package.json", "utf-8").then(JSON.parse);
 export const relaunch = async () => {
 	app.relaunch();
 	app.exit(0);

@@ -9,7 +9,7 @@ import Select from "@mui/material/Select";
 
 import { pkg, relaunch, update } from "plugins/lib.native/src/index.native";
 
-export const version = await pkg().version;
+export const version = (await pkg()).version;
 
 import { useConfirm } from "material-ui-confirm";
 import { LunaButton, LunaSettings, SpinningButton } from "../../components";
