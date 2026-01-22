@@ -10,6 +10,7 @@ import { ftch } from "@luna/core";
 import { StyleTag } from "@luna/lib";
 import { unloads } from "../../index.safe";
 import { LunaPluginHeader } from "../PluginsTab/LunaPluginHeader";
+import { themes, themeStyles } from "../Storage";
 
 export type LunaThemeStorage = {
 	enabled: boolean;
@@ -18,23 +19,22 @@ export type LunaThemeStorage = {
 
 export const LunaTheme = React.memo(({ theme, url, uninstall }: { theme: LunaThemeStorage; url: string; uninstall: VoidFn }) => {
 	const [enabled, setEnabled] = React.useState(theme.enabled);
+	// Sync enabled state when prop changes (e.g., emergency disable shortcut)
+	React.useEffect(() => setEnabled(theme.enabled), [theme.enabled]);
 	const [css, setCSS] = React.useState(theme.css);
 	const [loading, setLoading] = React.useState(false);
-	const [themeStyle] = React.useState(() => new StyleTag(url, unloads));
+	const [themeStyle] = React.useState(() => themeStyles[url] ?? (themeStyles[url] = new StyleTag(url, unloads)));
 	// Neptune theme manifest support
 	const [manifest, setManifest] = React.useState<{ name?: string; description?: string; author?: string } | undefined>();
 
-	// Memoize callbacks
 	const toggleEnabled = React.useCallback((_: unknown, checked: boolean) => {
-		setEnabled((theme.enabled = checked));
-		console.log(themeStyle.styleTag.isConnected);
-		themeStyle.css = checked ? css : undefined;
-		console.log(themeStyle.styleTag.isConnected, checked, css);
+		setEnabled((themes[url].enabled = checked));
+		themeStyle.css = checked ? themes[url].css : undefined;
 	}, []);
 	const loadCSS = React.useCallback(async () => {
 		setLoading(true);
 		try {
-			const css = (theme.css = await ftch.text(url));
+			const css = (themes[url].css = await ftch.text(url));
 			setCSS(css);
 			setManifest(JSON.parse(css.slice(css.indexOf("/*") + 2, css.indexOf("*/"))));
 		} finally {
@@ -43,7 +43,7 @@ export const LunaTheme = React.memo(({ theme, url, uninstall }: { theme: LunaThe
 	}, []);
 
 	React.useEffect(() => {
-		if (theme.enabled) {
+		if (themes[url]?.enabled) {
 			if (css === undefined) loadCSS();
 			else themeStyle.css = css;
 		}
