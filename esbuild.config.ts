@@ -21,7 +21,7 @@ const buildConfigs: BuildOptions[] = [
 		target: TidalNodeVersion,
 		format: "esm",
 		platform: "node",
-		external: ["electron", "module"],
+		external: ["electron", "module", "./app/package.json"],
 		plugins: [packageJsonPlugin],
 	},
 	{
