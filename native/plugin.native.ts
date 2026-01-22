@@ -138,8 +138,8 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			return target.apply(thisArg, argumentsList);
 		},
 		get: (target, prop, receiver) => {
-			// Allow access to require.resolve, require.cache, etc.
-			return Reflect.get(target, prop, receiver);
+			if (prop === "resolve" || prop === "toString") return Reflect.get(target, prop, receiver);
+			return undefined;
 		},
 	});
 
