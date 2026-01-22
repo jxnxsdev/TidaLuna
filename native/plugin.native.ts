@@ -114,23 +114,29 @@ const sandbox = {
 	luna,
 };
 
-const SAFE_MODULES = new Set([
-	"events",
-	"util",
-	"url",
-	"zlib",
-	"punycode",
-	"string_decoder",
-	"assert",
-	"buffer",
-	"stream",
-	"crypto",
-	"tty",
-	"os",
-	"https",
-	"http",
-]);
-const BLOCKED_MODULES = new Set(["child_process", "worker_threads", "inspector", "v8", "vm"]);
+const DANGER_ZONE = [
+	// The Filesystem (BLOCK ALL VARIANTS)
+	"fs",
+	"fs/promises",
+
+	// Relative imports
+	".",
+	"file://",
+
+	// Spawnables
+	"child_process",
+	"worker_threads",
+	"cluster",
+
+	// Internals
+	"inspector",
+	"v8",
+	"vm",
+
+	// WebAssembly System Interface
+	"wasi",
+];
+const PathsRegex = /^([a-zA-Z]:|[\\/])/;
 
 ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => {
 	const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
@@ -139,14 +145,10 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			const [moduleID] = argumentsList;
 
 			const cleanName = moduleID.replace(/^node:/, "");
-			if (SAFE_MODULES.has(cleanName)) return target.apply(thisArg, argumentsList);
 
-			// if (BLOCKED_MODULES.has(cleanName)) {
-			// 	console.error(`🛑 BLOCKED [${fileName}] LOADING: "${moduleID}"`);
-			// 	return {};
-			// }
-
-			console.warn(`[${fileName}] requiring: "${cleanName}"`);
+			if (DANGER_ZONE.some((prefix) => cleanName === prefix || cleanName.startsWith(prefix)) || PathsRegex.test(cleanName)) {
+				console.error(`!! 🛑WARNING🛑 !! [${fileName}] LOADING DANGEROUS MODULE: "${moduleID}"`);
+			}
 
 			return target.apply(thisArg, argumentsList);
 		},
@@ -156,10 +158,20 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		},
 	});
 
+	const WebAssembly = new Proxy(globalThis.WebAssembly, {
+		get(target, prop, receiver) {
+			console.error(`!! 🛑WARNING🛑 !! [${fileName}] LOADING WebAssembly (${String(prop)})!`);
+			return Reflect.get(target, prop, receiver);
+		},
+	});
+
 	sandbox.global = {
-		require,
 		...sandbox,
+		require,
+		WebAssembly,
 	};
+	// @ts-expect-error This exists
+	sandbox.WebAssembly = WebAssembly;
 
 	// Link exports so 'exports.foo =' works
 	sandbox.exports = sandbox.module.exports;
@@ -168,7 +180,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		name: fileName,
 		codeGeneration: {
 			strings: false,
-			wasm: false,
+			wasm: true,
 		},
 	});
 
