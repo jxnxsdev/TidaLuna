@@ -4,6 +4,7 @@ import { createRequire } from "module";
 import { pathToFileURL } from "url";
 import { ipcHandle } from "./ipc";
 
+import { objectify } from "@inrixia/helpers";
 import { pkg, relaunch, update } from "./update";
 
 declare global {
@@ -24,18 +25,69 @@ export const luna = (globalThis.luna = {
 });
 
 ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => {
-	// 1. Create Require (Matches your original prefix)
 	const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
+	const requireInterceptor = new Proxy(nativeRequire, {
+		apply: (target, thisArg, argumentsList) => {
+			const [moduleID] = argumentsList;
+
+			// LOGGING
+			console.log(`[Luna::${fileName}] requiring: "${moduleID}"`);
+
+			return target.apply(thisArg, <[string]>argumentsList);
+		},
+		get: (target, prop, receiver) => {
+			// Allow access to require.resolve, require.cache, etc.
+			return Reflect.get(target, prop, receiver);
+		},
+	});
+
+	const createStreamMock = (realStream: (NodeJS.ReadStream | NodeJS.WriteStream) & { fd: number }) => ({
+		fd: realStream.fd,
+		isTTY: realStream.isTTY,
+		write: (...args: Parameters<typeof realStream.write>) => realStream.write(...args),
+		on: () => {},
+		once: () => {},
+		emit: () => false,
+		removeListener: () => {},
+		setMaxListeners: () => {},
+	});
+
+	const mockProcess = {
+		// Safe Methods
+		nextTick: (callback: Function, ...args: any[]) => process.nextTick(callback, ...args),
+		hrtime: (time?: [number, number]) => process.hrtime(time),
+		...objectify({
+			env: process.env,
+			version: process.version,
+			versions: process.versions,
+			platform: process.platform,
+			arch: process.arch,
+			release: process.release,
+			features: process.features,
+		}),
+		stdin: createStreamMock(process.stdin),
+		stderr: createStreamMock(process.stderr),
+		stdout: createStreamMock(process.stdout),
+	};
 
 	// 2. Setup Sandbox
 	const sandbox = {
-		require: nativeRequire,
+		require: requireInterceptor,
 		module: { exports: {} },
 		exports: {},
 		global: {},
+		process: mockProcess,
 		// Node.js specific
+		ReadableStream,
 		Buffer,
-		console,
+		Event,
+		EventTarget,
+		console: {
+			log: console.log.bind(console),
+			error: console.error.bind(console),
+			warn: console.warn.bind(console),
+			info: console.info.bind(console),
+		},
 
 		// Timers (Not part of JS spec, part of host)
 		setTimeout,
@@ -78,11 +130,17 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 	// Link exports so 'exports.foo =' works
 	sandbox.exports = sandbox.module.exports;
 
-	const context = vm.createContext(sandbox);
+	const context = vm.createContext(sandbox, {
+		name: fileName,
+		codeGeneration: {
+			strings: false,
+			wasm: false,
+		},
+		// Ensures microtasks (Promises) run correctly within the execution window
+		microtaskMode: "afterEvaluate",
+	});
 
 	try {
-		// 3. Wrap & Execute
-		// We wrap the code in a function to simulate the Node.js module scope
 		const wrappedCode = `(function(exports, require, module, __filename, __dirname) { 
             ${code} 
         })`;
@@ -91,6 +149,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		const compiledWrapper = vm.runInContext(wrappedCode, context, {
 			filename: `luna://${fileName}`,
 			timeout: 5000,
+			displayErrors: true,
 		});
 
 		// Call the function with our sandboxed tools
