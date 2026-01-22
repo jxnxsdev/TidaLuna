@@ -2,15 +2,15 @@ import React from "react";
 
 import Stack from "@mui/material/Stack";
 
-import { InstallFromUrl, themes } from "../Storage";
+import { InstallFromUrl, themes, themeStyles } from "../Storage";
 import { LunaTheme } from "./LunaTheme";
 
 import { store as obyStore } from "oby";
 
 export const ThemesTab = React.memo(() => {
-	const [_themes, setThemes] = React.useState(themes);
+	const [_themes, setThemes] = React.useState(() => ({ ...obyStore.unwrap(themes) }));
 	React.useEffect(() => {
-		obyStore.on(themes, () => setThemes(obyStore.unwrap(themes)));
+		obyStore.on(themes, () => setThemes({ ...obyStore.unwrap(themes) }));
 	}, []);
 	return (
 		<Stack spacing={2}>
@@ -21,7 +21,13 @@ export const ThemesTab = React.memo(() => {
 					key={url}
 					url={url}
 					uninstall={() => {
-						delete _themes[url];
+						// Remove StyleTag
+						if (themeStyles[url]) {
+							themeStyles[url].remove();
+							delete themeStyles[url];
+						}
+						// Remove from reactive store
+						delete themes[url];
 					}}
 				/>
 			))}
