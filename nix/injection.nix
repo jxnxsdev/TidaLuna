@@ -1,8 +1,10 @@
 {
   stdenv,
   nodejs,
+
+  pnpmConfigHook,
+  fetchPnpmDeps,
   pnpm,
-  ...
 }:
 let
   package = builtins.fromJSON (builtins.readFile ../package.json);
@@ -16,10 +18,12 @@ stdenv.mkDerivation (rec {
 
   nativeBuildInputs = [
     nodejs
-    pnpm.configHook
+
+    pnpm
+    pnpmConfigHook
   ];
 
-  pnpmDeps = pnpm.fetchDeps {
+  pnpmDeps = fetchPnpmDeps {
     inherit pname src version;
     fetcherVersion = 1;
     hash = "sha256-Oj34rQbKbsHnqPdVv+ti8z+gZTT+VOsDxg/MQ22sLRQ=";
