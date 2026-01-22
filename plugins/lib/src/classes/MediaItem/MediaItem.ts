@@ -422,8 +422,8 @@ export class MediaItem extends ContentBase {
 	public async downloadProgress() {
 		return downloadProgress(this.id);
 	}
-	public download: (path: string, audioQuality?: redux.AudioQuality) => Promise<void> = asyncDebounce(
-		async (path: string, audioQuality?: redux.AudioQuality) => {
+	public download: (path: string | string[], audioQuality?: redux.AudioQuality) => Promise<void> = asyncDebounce(
+		async (path: string | string[], audioQuality?: redux.AudioQuality) => {
 			const [playbackInfo, flagTags] = await Promise.all([this.playbackInfo(audioQuality), this.flacTags()]);
 			if (!playbackInfo) throw new Error(`Track ${this.id} is not available`);
 			return download(playbackInfo, path, flagTags);

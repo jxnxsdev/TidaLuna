@@ -25,10 +25,11 @@ const fileExists = async (path: string): Promise<boolean> => {
 const downloads: Record<redux.ItemId, { progress: FetchProgress; promise: Promise<void> } | undefined> = {};
 export const downloadProgress = async (trackId: redux.ItemId) => downloads[trackId]?.progress;
 const downloadSema = new Semaphore(1);
-export const download = async (playbackInfo: PlaybackInfo, path: string, tags?: MetaTags): Promise<void> =>
+export const download = async (playbackInfo: PlaybackInfo, path: string | string[], tags?: MetaTags): Promise<void> =>
 	downloadSema.with(async () => {
 		if (downloads[playbackInfo.trackId] !== undefined) return downloads[playbackInfo.trackId]!.promise;
 		try {
+			if (Array.isArray(path)) path = join(...path);
 			// Dont download if file already exists
 			if (await fileExists(path)) return;
 			const parsedPath = parse(path);

@@ -18,7 +18,7 @@ export const defaultBuildOptions: BuildOptions = {
 export const TidalNodeVersion = "node20.15"; // Tidal node version
 export const TidalChromeVersion = "chrome126"; // Tidal target version
 
-const externals = ["@luna/*", "oby", "react", "react-dom/client", "react/jsx-runtime", "electron", "path"];
+const externals = ["@luna/*", "oby", "react", "react-dom/client", "react/jsx-runtime", "electron"];
 
 export const pluginBuildOptions = async (pluginPath: string, opts?: BuildOptions) => {
 	const pkgPath = path.join(pluginPath, "package.json");
