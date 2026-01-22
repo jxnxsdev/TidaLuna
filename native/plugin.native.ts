@@ -31,87 +31,6 @@ const createStreamMock = (realStream: (NodeJS.ReadStream | NodeJS.WriteStream) &
 	setMaxListeners: () => {},
 });
 
-const mockProcess = {
-	// Safe Methods
-	nextTick: (...args: Parameters<typeof process.nextTick>) => process.nextTick(...args),
-	hrtime: (time?: [number, number]) => process.hrtime(time),
-	...objectify({
-		env: process.env,
-		version: process.version,
-		versions: process.versions,
-		platform: process.platform,
-		arch: process.arch,
-		release: process.release,
-		features: process.features,
-	}),
-	stdin: createStreamMock(process.stdin),
-	stderr: createStreamMock(process.stderr),
-	stdout: createStreamMock(process.stdout),
-
-	resourcesPath: process.resourcesPath,
-
-	debugProcess: () => {
-		// @ts-expect-error This exists
-		process._debugProcess(process.pid);
-		return process.debugPort;
-	},
-};
-
-// 2. Setup Sandbox
-const sandbox = {
-	module: { exports: {} },
-	exports: {},
-	global: {},
-	process: mockProcess,
-	// Node.js specific
-	ReadableStream,
-	Buffer,
-	Event,
-	EventTarget,
-	console: {
-		log: console.log.bind(console),
-		error: console.error.bind(console),
-		warn: console.warn.bind(console),
-		info: console.info.bind(console),
-	},
-
-	// Timers (Not part of JS spec, part of host)
-	setTimeout,
-	clearTimeout,
-	setInterval,
-	clearInterval,
-	setImmediate,
-	clearImmediate,
-
-	// Web APIs (Node.js provides these, but V8 vanilla context might lack them)
-	URL,
-	URLSearchParams,
-	TextEncoder,
-	TextDecoder,
-	fetch,
-	Headers,
-	Request,
-	Response,
-	FormData,
-	Blob,
-	File,
-	atob,
-	btoa,
-	performance,
-	queueMicrotask,
-	structuredClone,
-	AbortController,
-	AbortSignal,
-
-	// Crypto
-	crypto,
-	SubtleCrypto,
-	CryptoKey,
-
-	// Luna specific
-	luna,
-};
-
 const DANGER_GROUPS = {
 	EXECUTION: "Execute external system commands & run background processes unrestricted with full system level access",
 	FILESYSTEM: "Full read/write/delete access to your filesystem for all files",
@@ -232,13 +151,96 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		},
 	});
 
-	sandbox.global = {
-		...sandbox,
+	const mockProcess = {
+		// Safe Methods
+		nextTick: (...args: Parameters<typeof process.nextTick>) => process.nextTick(...args),
+		hrtime: (time?: [number, number]) => process.hrtime(time),
+		...objectify({
+			env: process.env,
+			version: process.version,
+			versions: process.versions,
+			platform: process.platform,
+			arch: process.arch,
+			release: process.release,
+			features: process.features,
+		}),
+		stdin: createStreamMock(process.stdin),
+		stderr: createStreamMock(process.stderr),
+		stdout: createStreamMock(process.stdout),
+
+		resourcesPath: process.resourcesPath,
+
+		debugProcess: () => {
+			console.warn(`[🛑Security🛑] "${fileName}" is calling "process.debugProcess"`);
+			if (!trust(fileName, "DebugProcess", "Debug the main process, gives full system access!")) {
+				throw new Error(`Access Denied! User blocked "process.debugProcess" in "${fileName}"`);
+			}
+			// @ts-expect-error This exists
+			process._debugProcess(process.pid);
+			return process.debugPort;
+		},
+	};
+
+	// 2. Setup Sandbox
+	const sandbox = {
+		module: { exports: {} },
+		exports: {},
+		global: {},
+		process: mockProcess,
+		// Node.js specific
+		ReadableStream,
+		Buffer,
+		Event,
+		EventTarget,
+		console: {
+			log: console.log.bind(console),
+			error: console.error.bind(console),
+			warn: console.warn.bind(console),
+			info: console.info.bind(console),
+		},
+
+		// Timers (Not part of JS spec, part of host)
+		setTimeout,
+		clearTimeout,
+		setInterval,
+		clearInterval,
+		setImmediate,
+		clearImmediate,
+
+		// Web APIs (Node.js provides these, but V8 vanilla context might lack them)
+		URL,
+		URLSearchParams,
+		TextEncoder,
+		TextDecoder,
+		fetch,
+		Headers,
+		Request,
+		Response,
+		FormData,
+		Blob,
+		File,
+		atob,
+		btoa,
+		performance,
+		queueMicrotask,
+		structuredClone,
+		AbortController,
+		AbortSignal,
+
+		// Crypto
+		crypto,
+		SubtleCrypto,
+		CryptoKey,
+
+		// Luna specific
+		luna,
+
+		// Proxied
 		require,
 		WebAssembly,
 	};
-	// @ts-expect-error This exists
-	sandbox.WebAssembly = WebAssembly;
+
+	sandbox.global = sandbox;
 
 	// Link exports so 'exports.foo =' works
 	sandbox.exports = sandbox.module.exports;
