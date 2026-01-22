@@ -5,23 +5,19 @@ import { pathToFileURL } from "url";
 import { ipcHandle } from "./ipc";
 
 import { objectify } from "@inrixia/helpers";
-import { pkg, relaunch, update } from "./update";
+import { BrowserWindow, dialog } from "electron";
+import * as expose from "./expose";
 
 declare global {
 	var luna: {
 		modules: Record<string, any>;
-		update: typeof update;
-		pkg: typeof pkg;
-		relaunch: typeof relaunch;
 		sendToRender: Electron.WebContents["send"];
-	};
+	} & typeof expose;
 }
 export const luna = (globalThis.luna = {
 	modules: {},
-	update,
-	pkg,
-	relaunch,
 	sendToRender: (() => {}) as Electron.WebContents["send"],
+	...expose,
 });
 
 const createStreamMock = (realStream: (NodeJS.ReadStream | NodeJS.WriteStream) & { fd: number }) => ({
@@ -114,40 +110,100 @@ const sandbox = {
 	luna,
 };
 
-const DANGER_ZONE = [
+const DANGER_ZONE: Record<string, string> = {
 	// The Filesystem (BLOCK ALL VARIANTS)
-	"fs",
-	"fs/promises",
+	fs: "Full access to read, write, and delete files on your hard drive",
+	"fs/promises": "Full access to read, write, and delete files on your hard drive",
 
-	// Relative imports
-	".",
-	"file://",
+	// Electron
+	electron: "Full control over the application, clipboard, and system hardware",
 
-	// Spawnables
-	"child_process",
-	"worker_threads",
-	"cluster",
+	// Relative/Absolute imports
+	".": "Bypasses module security to load arbitrary local files",
+	"file://": "Direct access to the local file system",
 
-	// Internals
-	"inspector",
-	"v8",
-	"vm",
+	// Spawnables (Remote Code Execution risks)
+	child_process: "Executes shell commands (cmd/bash) and external programs",
+	worker_threads: "High resource usage (crypto mining) and background execution",
+	cluster: "Spawns multiple system processes to exhaust resources",
+
+	// Internals (Sandbox Escape risks)
+	inspector: "Connects to the debugger to inspect memory and steal secrets",
+	v8: "Low-level engine access and memory manipulation",
+	vm: "Compiles and executes dynamic code to bypass security restrictions",
 
 	// WebAssembly System Interface
-	"wasi",
-];
+	wasi: "Low-level system access via WebAssembly",
+	WebAssembly: "Executes compiled binary code (High performance, potential sandbox evasion)",
+};
+const DANGER_ZONE_MODULES = Object.keys(DANGER_ZONE);
 const PathsRegex = /^([a-zA-Z]:|[\\/])/;
 
+const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
+
+const trusted: Record<string, Set<string>> = {};
+const trust = (fileName: string, moduleName: string): boolean => {
+	if (moduleName === "fs/promises") moduleName = "fs";
+	if (trusted[fileName]?.has(moduleName)) return true;
+	const win = BrowserWindow.getFocusedWindow();
+	const responseIndex = dialog.showMessageBoxSync(win!, {
+		type: "question",
+		buttons: ["Allow", "Deny"],
+		defaultId: 0,
+		cancelId: 1,
+		title: "Security Verification",
+		message: "Allow Native Code Execution?",
+		detail: `Plugin: ${fileName}\nModule: ${moduleName}\nDescription: ${DANGER_ZONE[moduleName]}\n\nDo you want to allow this plugin to use this module?`,
+		noLink: true,
+		normalizeAccessKeys: true,
+	});
+	// Allow
+	if (responseIndex === 0) {
+		trusted[fileName] ??= new Set<string>();
+		trusted[fileName].add(moduleName);
+		return true;
+	}
+	return false;
+};
+
 ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => {
-	const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
 	const require = new Proxy(nativeRequire, {
 		apply: (target, thisArg, argumentsList: [id: string]) => {
 			const [moduleID] = argumentsList;
-
 			const cleanName = moduleID.replace(/^node:/, "");
 
-			if (DANGER_ZONE.some((prefix) => cleanName === prefix || cleanName.startsWith(prefix)) || PathsRegex.test(cleanName)) {
-				console.error(`!! 🛑WARNING🛑 !! [${fileName}] LOADING DANGEROUS MODULE: "${moduleID}"`);
+			if (DANGER_ZONE_MODULES.some((prefix) => cleanName === prefix || cleanName.startsWith(prefix)) || PathsRegex.test(cleanName)) {
+				console.error(`[🛑Security🛑] == ${fileName} loading "${cleanName}"`);
+
+				// --- SPECIAL LOGIC FOR FS ---
+				if (cleanName === "fs" || cleanName === "fs/promises") {
+					// 1. Load the REAL module first
+					const realModule = target.apply(thisArg, argumentsList);
+
+					// 2. Define the recursive proxy helper INLINE
+					const deepProxy = (value: any, path: string): any => {
+						// Pass through primitives and nulls
+						if ((typeof value !== "object" || value === null) && typeof value !== "function") return value;
+						return new Proxy(value, {
+							apply: (fnTarget, fnThis, fnArgs) => {
+								console.log(`[🛑Security🛑] == Intercepting CALL to "${path}" for "${fileName}"`);
+
+								if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" for "${fileName}"`);
+								return fnTarget.apply(fnThis, fnArgs);
+							},
+							get: (objTarget, prop, receiver) => {
+								// Allow safe internal props
+								if (prop === "constructor" || prop === "then" || typeof prop === "symbol") return Reflect.get(objTarget, prop, receiver);
+
+								// Get the value and recursively wrap it using this same helper
+								const realValue = Reflect.get(objTarget, prop, receiver);
+								return deepProxy(realValue, `${path}.${String(prop)}`);
+							},
+						});
+					};
+					return deepProxy(realModule, cleanName);
+				}
+				if (!trust(fileName, cleanName)) throw new Error(`Access Denied! User blocked loading of module "${cleanName}" for "${fileName}"`);
 			}
 
 			return target.apply(thisArg, argumentsList);
@@ -160,7 +216,8 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 
 	const WebAssembly = new Proxy(globalThis.WebAssembly, {
 		get(target, prop, receiver) {
-			console.error(`!! 🛑WARNING🛑 !! [${fileName}] LOADING WebAssembly (${String(prop)})!`);
+			console.error(`[🛑Security🛑] == ${fileName} loading WebAssembly (${String(prop)})!`);
+			if (!trust(fileName, "WebAssembly")) throw new Error(`Access Denied! User blocked "WebAssembly" for "${fileName}"`);
 			return Reflect.get(target, prop, receiver);
 		},
 	});

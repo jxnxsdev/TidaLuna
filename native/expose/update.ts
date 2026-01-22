@@ -7,7 +7,7 @@ import path from "path";
 import type { PackageJson } from "type-fest";
 import { promisify } from "util";
 
-export const pkg: PackageJson = require("./package.json");
+export const pkg: PackageJson = require("../package.json");
 export const relaunch = async () => {
 	app.relaunch();
 	app.exit(0);
