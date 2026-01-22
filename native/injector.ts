@@ -231,7 +231,7 @@ require(startPath);
 // #endregion
 
 // #region LunaNative
-import "./plugin.native";
+import "./NativeModule";
 // #endregion
 
 // Literally just to log if preload fails

@@ -69,7 +69,7 @@ export const LunaClientUpdate = React.memo(() => {
 					if (!result.confirmed) return;
 					const releaseUrl = releases.find((r) => r.tag_name === selectedRelease)?.assets[0].browser_download_url;
 					if (releaseUrl === undefined) throw new Error("Release URL not found");
-					await update(releaseUrl);
+					await update(selectedRelease);
 				}}
 			/>
 			<LunaButton
