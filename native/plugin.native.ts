@@ -24,16 +24,131 @@ export const luna = (globalThis.luna = {
 	sendToRender: (() => {}) as Electron.WebContents["send"],
 });
 
+const createStreamMock = (realStream: (NodeJS.ReadStream | NodeJS.WriteStream) & { fd: number }) => ({
+	fd: realStream.fd,
+	isTTY: realStream.isTTY,
+	write: (...args: Parameters<typeof realStream.write>) => realStream.write(...args),
+	on: () => {},
+	once: () => {},
+	emit: () => false,
+	removeListener: () => {},
+	setMaxListeners: () => {},
+});
+
+const mockProcess = {
+	// Safe Methods
+	nextTick: (...args: Parameters<typeof process.nextTick>) => process.nextTick(...args),
+	hrtime: (time?: [number, number]) => process.hrtime(time),
+	...objectify({
+		env: process.env,
+		version: process.version,
+		versions: process.versions,
+		platform: process.platform,
+		arch: process.arch,
+		release: process.release,
+		features: process.features,
+	}),
+	stdin: createStreamMock(process.stdin),
+	stderr: createStreamMock(process.stderr),
+	stdout: createStreamMock(process.stdout),
+
+	debugProcess: () => {
+		// @ts-expect-error This exists
+		process._debugProcess(process.pid);
+		return process.debugPort;
+	},
+};
+
+// 2. Setup Sandbox
+const sandbox = {
+	module: { exports: {} },
+	exports: {},
+	global: {},
+	process: mockProcess,
+	// Node.js specific
+	ReadableStream,
+	Buffer,
+	Event,
+	EventTarget,
+	console: {
+		log: console.log.bind(console),
+		error: console.error.bind(console),
+		warn: console.warn.bind(console),
+		info: console.info.bind(console),
+	},
+
+	// Timers (Not part of JS spec, part of host)
+	setTimeout,
+	clearTimeout,
+	setInterval,
+	clearInterval,
+	setImmediate,
+	clearImmediate,
+
+	// Web APIs (Node.js provides these, but V8 vanilla context might lack them)
+	URL,
+	URLSearchParams,
+	TextEncoder,
+	TextDecoder,
+	fetch,
+	Headers,
+	Request,
+	Response,
+	FormData,
+	Blob,
+	File,
+	atob,
+	btoa,
+	performance,
+	queueMicrotask,
+	structuredClone,
+	AbortController,
+	AbortSignal,
+
+	// Crypto
+	crypto,
+	SubtleCrypto,
+	CryptoKey,
+
+	// Luna specific
+	luna,
+};
+
+const SAFE_MODULES = new Set([
+	"events",
+	"util",
+	"url",
+	"zlib",
+	"punycode",
+	"string_decoder",
+	"assert",
+	"buffer",
+	"stream",
+	"crypto",
+	"tty",
+	"os",
+	"https",
+	"http",
+]);
+const BLOCKED_MODULES = new Set(["child_process", "worker_threads", "inspector", "v8", "vm"]);
+
 ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => {
 	const nativeRequire = createRequire(pathToFileURL(process.resourcesPath + "/").href);
-	const requireInterceptor = new Proxy(nativeRequire, {
-		apply: (target, thisArg, argumentsList) => {
+	const require = new Proxy(nativeRequire, {
+		apply: (target, thisArg, argumentsList: [id: string]) => {
 			const [moduleID] = argumentsList;
 
-			// LOGGING
-			console.log(`[Luna::${fileName}] requiring: "${moduleID}"`);
+			const cleanName = moduleID.replace(/^node:/, "");
+			if (SAFE_MODULES.has(cleanName)) return target.apply(thisArg, argumentsList);
 
-			return target.apply(thisArg, <[string]>argumentsList);
+			// if (BLOCKED_MODULES.has(cleanName)) {
+			// 	console.error(`🛑 BLOCKED [${fileName}] LOADING: "${moduleID}"`);
+			// 	return {};
+			// }
+
+			console.warn(`[${fileName}] requiring: "${cleanName}"`);
+
+			return target.apply(thisArg, argumentsList);
 		},
 		get: (target, prop, receiver) => {
 			// Allow access to require.resolve, require.cache, etc.
@@ -41,91 +156,10 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		},
 	});
 
-	const createStreamMock = (realStream: (NodeJS.ReadStream | NodeJS.WriteStream) & { fd: number }) => ({
-		fd: realStream.fd,
-		isTTY: realStream.isTTY,
-		write: (...args: Parameters<typeof realStream.write>) => realStream.write(...args),
-		on: () => {},
-		once: () => {},
-		emit: () => false,
-		removeListener: () => {},
-		setMaxListeners: () => {},
-	});
-
-	const mockProcess = {
-		// Safe Methods
-		nextTick: (callback: Function, ...args: any[]) => process.nextTick(callback, ...args),
-		hrtime: (time?: [number, number]) => process.hrtime(time),
-		...objectify({
-			env: process.env,
-			version: process.version,
-			versions: process.versions,
-			platform: process.platform,
-			arch: process.arch,
-			release: process.release,
-			features: process.features,
-		}),
-		stdin: createStreamMock(process.stdin),
-		stderr: createStreamMock(process.stderr),
-		stdout: createStreamMock(process.stdout),
+	sandbox.global = {
+		require,
+		...sandbox,
 	};
-
-	// 2. Setup Sandbox
-	const sandbox = {
-		require: requireInterceptor,
-		module: { exports: {} },
-		exports: {},
-		global: {},
-		process: mockProcess,
-		// Node.js specific
-		ReadableStream,
-		Buffer,
-		Event,
-		EventTarget,
-		console: {
-			log: console.log.bind(console),
-			error: console.error.bind(console),
-			warn: console.warn.bind(console),
-			info: console.info.bind(console),
-		},
-
-		// Timers (Not part of JS spec, part of host)
-		setTimeout,
-		clearTimeout,
-		setInterval,
-		clearInterval,
-		setImmediate,
-		clearImmediate,
-
-		// Web APIs (Node.js provides these, but V8 vanilla context might lack them)
-		URL,
-		URLSearchParams,
-		TextEncoder,
-		TextDecoder,
-		fetch,
-		Headers,
-		Request,
-		Response,
-		FormData,
-		Blob,
-		File,
-		atob,
-		btoa,
-		performance,
-		queueMicrotask,
-		structuredClone,
-		AbortController,
-		AbortSignal,
-
-		// Crypto
-		crypto: globalThis.crypto,
-		SubtleCrypto: globalThis.SubtleCrypto,
-		CryptoKey: globalThis.CryptoKey,
-
-		// Luna specific
-		luna,
-	};
-	sandbox.global = sandbox;
 
 	// Link exports so 'exports.foo =' works
 	sandbox.exports = sandbox.module.exports;
@@ -136,8 +170,6 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 			strings: false,
 			wasm: false,
 		},
-		// Ensures microtasks (Promises) run correctly within the execution window
-		microtaskMode: "afterEvaluate",
 	});
 
 	try {
@@ -155,7 +187,7 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		// Call the function with our sandboxed tools
 		compiledWrapper.apply(sandbox.exports, [
 			sandbox.exports,
-			sandbox.require,
+			require,
 			sandbox.module,
 			`luna://${fileName}`, // __filename
 			process.resourcesPath, // __dirname
