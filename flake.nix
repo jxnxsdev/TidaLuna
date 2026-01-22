@@ -11,24 +11,28 @@
       forAllSystems =
         function:
         nixpkgs.lib.genAttrs nixpkgs.lib.systems.flakeExposed (
-          system: function nixpkgs.legacyPackages.${system}
+          # unfree packages needed for "castlabs-electron"
+          system: function (
+            import nixpkgs { inherit system; config.allowUnfree = true; }
+          )
         );
     in
     {
-    packages = forAllSystems (pkgs: {
-      # TidaLuna injection stand-alone
-      injection = pkgs.callPackage ./nix/injection.nix { };
 
-      # TidaLuna injected into tidal-hifi
-      default = pkgs.callPackage ./nix/overlay.nix { };
-    });
+      packages = forAllSystems (pkgs: {
+        # TidaLuna injection stand-alone
+        injection = pkgs.callPackage ./nix/injection.nix { };
 
-    # Dev environment
-    devShells = forAllSystems (pkgs: {
-      default = pkgs.callPackage ./nix/shell.nix { };
-    });
+        # TidaLuna injected into tidal-hifi
+        default = pkgs.callPackage ./nix/overlay.nix { };
+      });
 
-    # Overlay (if preferred)
-    overlays.default = final: _: { tidal-luna = final.callPackage ./nix/overlay.nix { }; };
+      # Dev environment
+      devShells = forAllSystems (pkgs: {
+        default = pkgs.callPackage ./nix/shell.nix { };
+      });
+
+      # Overlay (if preferred)
+      overlays.default = final: _: { tidal-hifi = final.callPackage ./nix/overlay.nix { }; };
   };
 }

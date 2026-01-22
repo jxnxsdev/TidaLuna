@@ -47,14 +47,25 @@ codesign --force --deep --sign - /Applications/TIDAL.app
 Done! Start Tidal and you should see the Luna splashscreen.
 
 ### Nix install
-
-1. Add the flake in your inputs:
-
+TidaLuna is managed through flakes, so the first thing you have to do is add TidaLuna in your inputs
 ```nix
 inputs.tidaLuna.url = "github:Inrixia/TidaLuna"
 ```
 
-2. Then install the package from the input:
+There are now two ways to install the injected tidal-hifi client
+
+#### overlay
+Add TidaLuna into your overlay list
+```nix
+nixpkgs.overlay = [
+  inputs.tidaLuna.overlays.default
+];
+```
+
+after that install the tidal-hifi package as you used to
+
+#### package
+Replace your current `tidal-hifi` package with the new input
 
 ```diff
 environment.systemPackages = with pkgs; [

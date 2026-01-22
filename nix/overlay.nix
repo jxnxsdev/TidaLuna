@@ -1,11 +1,5 @@
 {
   callPackage,
-  fetchFromGitHub,
-
-  fetchNpmDeps,
-
-  lib,
-
   tidal-hifi
 }:
 let
