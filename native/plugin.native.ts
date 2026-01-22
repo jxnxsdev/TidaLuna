@@ -111,30 +111,34 @@ const sandbox = {
 };
 
 const DANGER_ZONE: Record<string, string> = {
-	// The Filesystem (BLOCK ALL VARIANTS)
-	fs: "Full access to read, write, and delete files on your hard drive",
-	"fs/promises": "Full access to read, write, and delete files on your hard drive",
+	// The Filesystem
+	fs: "Read, write and delete any files on this computer",
+	"fs/promises": "Read, write and delete any files on this computer",
 
-	// Electron
-	electron: "Full control over the application, clipboard, and system hardware",
+	// System Commands
+	child_process: "Run system commands (terminal) and external programs (system-level access)",
 
-	// Relative/Absolute imports
-	".": "Bypasses module security to load arbitrary local files",
-	"file://": "Direct access to the local file system",
+	// Background Processing (The ones you asked about)
+	worker_threads: "Run heavy processing tasks in the background (system-level access)",
+	cluster: "Create multiple system processes to handle heavy workloads (system-level access)",
 
-	// Spawnables (Remote Code Execution risks)
-	child_process: "Executes shell commands (cmd/bash) and external programs",
-	worker_threads: "High resource usage (crypto mining) and background execution",
-	cluster: "Spawns multiple system processes to exhaust resources",
+	// Electron / App Control
+	electron: "Control the application window and clipboard",
+	os: "Access system information (Username, Home Directory, Network IP)",
+	process: "Access environment variables and control the current process",
 
-	// Internals (Sandbox Escape risks)
-	inspector: "Connects to the debugger to inspect memory and steal secrets",
-	v8: "Low-level engine access and memory manipulation",
-	vm: "Compiles and executes dynamic code to bypass security restrictions",
+	// Advanced Internals
+	inspector: "Access internal debugging tools",
+	v8: "Modify the javascript engine directly (highly suspicious)",
+	vm: "Run unverified code that tries to bypass security rules",
 
-	// WebAssembly System Interface
-	wasi: "Low-level system access via WebAssembly",
-	WebAssembly: "Executes compiled binary code (High performance, potential sandbox evasion)",
+	// WebAssembly
+	wasi: "System-level access via WebAssembly",
+	WebAssembly: "Execute compiled binary code (System-level access)",
+
+	// Imports
+	".": "Load local or system files",
+	"file://": "Read local or system files",
 };
 const DANGER_ZONE_MODULES = Object.keys(DANGER_ZONE);
 const PathsRegex = /^([a-zA-Z]:|[\\/])/;
