@@ -96,6 +96,9 @@ export const secureLoad = (fileName: string, code: string): Module["exports"] =>
 
 		resourcesPath: process.resourcesPath,
 
+		cwd: () => process.cwd(),
+		argv: process.argv,
+
 		debugProcess: () => {
 			console.warn(`[🛑Security🛑] "${fileName}" is calling "process.debugProcess"`);
 			if (!trust(fileName, "DebugProcess", "Debug the main process, gives full system access!")) {
