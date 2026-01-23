@@ -15,6 +15,7 @@ const fontUrlRegex = /\.(woff2?|ttf|otf|eot)(\?.*)?$/i;
 // #region Bundle
 const bundleDir = process.env.TIDALUNA_DIST_PATH ?? path.dirname(fileURLToPath(import.meta.url));
 const tidalAppPath = path.join(process.resourcesPath, "original.asar");
+const tidalPackagePromise = readFile(path.join(tidalAppPath, "package.json"), "utf8").then(JSON.parse);
 // #endregion
 
 // Allow debugging from remote origins (e.g., Chrome DevTools over localhost)
@@ -120,15 +121,10 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		}
 
 		if (isTidalWindow) {
-			// Store original preload and add a handle to fetch it later (see ./preload.ts)
-			const origialPreload = options.webPreferences?.preload;
-			ipcHandle("__Luna.originalPreload", async () => (await readFile(origialPreload)).toString());
-
-			// Replace the preload instead of using setPreloads because of some differences in internal behaviour.
-			// Set preload script to Luna's
-			options.webPreferences.preload = path.join(bundleDir, "preload.mjs");
-
-			// TODO: Find why sandboxing has to be disabled
+			// Luna preload via session (runs FIRST)
+			electron.session.defaultSession.setPreloads([path.join(bundleDir, "preload.mjs")]);
+			// Original preload via webPreferences (runs AFTER session preloads)
+			// Note: tidal-hifi preload uses @electron/remote which doesn't work with sandbox, so it will fail silently
 			options.webPreferences.sandbox = true;
 		}
 
@@ -188,7 +184,7 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 });
 // #endregion
 
-const tidalPackage = await readFile(path.resolve(path.join(tidalAppPath, "package.json")), "utf8").then(JSON.parse);
+const tidalPackage = await tidalPackagePromise;
 const startPath = path.join(tidalAppPath, tidalPackage.main);
 
 // @ts-expect-error This exists?

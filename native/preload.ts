@@ -1,4 +1,5 @@
-import { sleep, unloadableEmitter, type AnyFn } from "@inrixia/helpers";
+import { unloadableEmitter, type AnyFn } from "@inrixia/helpers";
+
 import { contextBridge, ipcRenderer, webFrame } from "electron";
 
 const ipcRendererUnloadable = unloadableEmitter(ipcRenderer, null, "ipcRenderer");
@@ -64,8 +65,6 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 			})()`,
 			true,
 		);
-		await sleep(0);
-		eval(await ipcRenderer.invoke("__Luna.originalPreload"));
 	} catch (err) {
 		ipcRenderer.invoke("__Luna.preloadErr", err);
 		throw err;
