@@ -5,9 +5,9 @@ export const nativeRequire = createRequire(pathToFileURL(process.resourcesPath +
 
 import { ipcHandle } from "../ipc";
 
+import { createHash } from "crypto";
 import * as expose from "../expose";
 import { secureLoad } from "./secureLoad";
-import { unsafeLoad } from "./unsafeLoad";
 
 declare global {
 	var luna: {
@@ -21,16 +21,22 @@ export const luna = (globalThis.luna = {
 	...expose,
 });
 
+export type NativeModuleInfo = {
+	fileName: string;
+	code: string;
+	hash: string;
+};
+
 ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => {
-	let exports;
-	try {
-		exports = secureLoad(fileName, code);
-	} catch (err) {
-		// Attempt to load depricated modules using unsafe method
-		const isDepricatedModule = Error.isError(err) && /Cannot use import statement outside a module/i.test(err.message);
-		if (isDepricatedModule) exports = await unsafeLoad(fileName, code);
-		else throw err;
-	}
+	const hash = createHash("sha256").update(code, "utf8").digest("hex");
+
+	const moduleInfo = {
+		hash,
+		fileName,
+		code,
+	};
+
+	const exports = secureLoad(moduleInfo);
 
 	globalThis.luna.modules[fileName] = exports;
 	const channel = `__LunaNative.${fileName}`;

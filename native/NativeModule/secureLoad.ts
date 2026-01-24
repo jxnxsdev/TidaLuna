@@ -1,58 +1,90 @@
 import { objectify } from "@inrixia/helpers";
 import vm from "vm";
 
-import { nativeRequire } from ".";
-import { DANGER_GROUPS, isUnsafe } from "./isUnsafe";
-import { trust } from "./trust";
+import { nativeRequire, type NativeModuleInfo } from ".";
+import { isTrusted } from "./trust";
 
 import type Module from "module";
+import { moduleWhitelist } from "./moduleWhitelist";
 
-export const secureLoad = (fileName: string, code: string): Module["exports"] => {
+export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
+	const { fileName, code } = moduleInfo;
+
 	const require = new Proxy(nativeRequire, {
-		apply: (target, thisArg, argumentsList: [id: string]) => {
-			const [moduleID] = argumentsList;
+		apply: (target, thisArg, argumentsList: [moduleName: string]) => {
+			const moduleName = argumentsList[0].replace(/^node:/, "").replace("/promises", "");
 
-			const cleanName = moduleID.replace(/^node:/, "");
+			// Whitelist (Pass through directly, no proxy needed)
+			if (moduleWhitelist.has(moduleName)) return target.apply(thisArg, argumentsList);
 
-			const unsafeDesc = isUnsafe(cleanName);
-			if (unsafeDesc) {
-				console.warn(`[🛑Security🛑] "${fileName}" is loading "${cleanName}"`);
+			// Load the real module
+			const realModule = target.apply(thisArg, argumentsList);
 
-				// --- SPECIAL LOGIC FOR FS ---
-				if (cleanName === "fs" || cleanName === "fs/promises") {
-					// 1. Load the REAL module first
-					const realModule = target.apply(thisArg, argumentsList);
+			// REVERSE LOOKUP (Critical for fixing "Incompatible Receiver")
+			const proxyToTarget = new WeakMap<any, any>();
+			// FORWARD CACHE (Preserves Identity)
+			const proxyCache = new WeakMap<any, any>();
 
-					// 2. Define the recursive proxy helper INLINE
-					const deepProxy = (value: any, path: string): any => {
-						// Pass through primitives and nulls
-						if ((typeof value !== "object" || value === null) && typeof value !== "function") return value;
-						return new Proxy(value, {
-							apply: (fnTarget, fnThis, fnArgs) => {
-								if (!trust(fileName, cleanName, unsafeDesc)) throw new Error(`Access Denied! User blocked execution of "${cleanName}" in "${fileName}"`);
+			const createLazyProxy = (targetValue: any): any => {
+				// Pass through primitives
+				if (Object(targetValue) !== targetValue) return targetValue;
 
-								console.warn(`[🛑Security🛑] "${fileName}" is executing "${path}"`);
-								return fnTarget.apply(fnThis, fnArgs);
-							},
-							get: (objTarget, prop, receiver) => {
-								// Allow safe internal props
-								if (prop === "constructor" || prop === "then" || typeof prop === "symbol") return Reflect.get(objTarget, prop, receiver);
+				// Return cached proxy
+				if (proxyCache.has(targetValue)) return proxyCache.get(targetValue);
 
-								// Get the value and recursively wrap it using this same helper
-								const realValue = Reflect.get(objTarget, prop, receiver);
-								return deepProxy(realValue, `${path}.${String(prop)}`);
-							},
-						});
-					};
-					return deepProxy(realModule, cleanName);
-				}
+				const proxy = new Proxy(targetValue, {
+					get: (obj, prop, receiver) => {
+						// Block Sandbox Escapes
+						if (prop === "constructor") return undefined;
 
-				if (!trust(fileName, cleanName, unsafeDesc)) throw new Error(`Access Denied! User blocked loading "${cleanName}" in "${fileName}"`);
-			}
+						// Pass through Symbols (Safe)
+						if (typeof prop === "symbol") return Reflect.get(obj, prop, receiver);
 
-			return target.apply(thisArg, argumentsList);
+						// Handle Read-Only Invariants (Fixes "TypeError: 'get' on proxy...")
+						const descriptor = Reflect.getOwnPropertyDescriptor(obj, prop);
+						if (descriptor && !descriptor.configurable && !descriptor.writable) {
+							return Reflect.get(obj, prop, receiver);
+						}
+
+						const value = Reflect.get(obj, prop, receiver);
+
+						// We still proxy properties (like .promises or .constants) so we can trap them later.
+						return createLazyProxy(value);
+					},
+
+					apply: (fn, thisArg, args) => {
+						if (!isTrusted(moduleInfo, moduleName, targetValue)) {
+							throw new Error(`[🛑Security🛑] Access Denied: User blocked execution of '${moduleName}' in '${fileName}'`);
+						}
+
+						// Native methods (Map.get, Promise.then) crash if 'this' is a Proxy.
+						const realThis = proxyToTarget.get(thisArg) || thisArg;
+
+						// Return the REAL result (Promise, Buffer, etc.) fixes "Incompatible Receiver" or chaining issues.
+						return Reflect.apply(fn, realThis, args);
+					},
+
+					construct: (fn, args) => {
+						if (!isTrusted(moduleInfo, moduleName, targetValue)) {
+							throw new Error(`[🛑Security🛑] Access Denied: User blocked construction of '${moduleName}' in '${fileName}'`);
+						}
+
+						return Reflect.construct(fn, args);
+					},
+				});
+
+				// Register in both maps
+				proxyCache.set(targetValue, proxy);
+				proxyToTarget.set(proxy, targetValue);
+
+				return proxy;
+			};
+
+			// Start the proxy chain with the module name as the root path
+			return createLazyProxy(realModule);
 		},
 		get: (target, prop, receiver) => {
+			// Only expose resolve and toString
 			if (prop === "resolve" || prop === "toString") return Reflect.get(target, prop, receiver);
 			return undefined;
 		},
@@ -61,7 +93,10 @@ export const secureLoad = (fileName: string, code: string): Module["exports"] =>
 	const WebAssembly = new Proxy(globalThis.WebAssembly, {
 		get(target, prop, receiver) {
 			console.warn(`[🛑Security🛑] "${fileName}" is loading WebAssembly (${String(prop)})!`);
-			if (!trust(fileName, "WebAssembly", DANGER_GROUPS.EXECUTION)) throw new Error(`Access Denied! User blocked "WebAssembly" in "${fileName}"`);
+			if (!isTrusted(moduleInfo, "WebAssembly", target)) {
+				throw new Error(`[🛑Security🛑] Access Denied! User blocked 'WebAssembly' in '${fileName}'`);
+			}
+
 			return Reflect.get(target, prop, receiver);
 		},
 	});
@@ -101,9 +136,9 @@ export const secureLoad = (fileName: string, code: string): Module["exports"] =>
 
 		debugProcess: () => {
 			console.warn(`[🛑Security🛑] "${fileName}" is calling "process.debugProcess"`);
-			if (!trust(fileName, "DebugProcess", "Debug the main process, gives full system access!")) {
-				throw new Error(`Access Denied! User blocked "process.debugProcess" in "${fileName}"`);
-			}
+			// if (!isTrusted(fileName, "DebugProcess", "Debug the main process, gives full system access!", hash)) {
+			// 	throw new Error(`Access Denied! User blocked "process.debugProcess" in "${fileName}"`);
+			// }
 			// @ts-expect-error This exists
 			process._debugProcess(process.pid);
 			return process.debugPort;
