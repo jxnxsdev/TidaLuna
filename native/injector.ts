@@ -189,7 +189,7 @@ const startPath = path.join(tidalAppPath, tidalPackage.main);
 
 // @ts-expect-error This exists?
 electron.app.setAppPath?.(tidalAppPath);
-electron.app.name = tidalPackage.name;
+electron.app.setName(tidalPackage.name);
 
 const blockedModules = new Set(["jszip"]);
 const _require = Module.prototype.require;

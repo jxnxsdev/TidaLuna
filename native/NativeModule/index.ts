@@ -36,7 +36,14 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		code,
 	};
 
-	const exports = secureLoad(moduleInfo);
+	let exports = secureLoad(moduleInfo);
+	try {
+		exports;
+	} catch (err) {
+		const isDepricatedModule = Error.isError(err) && /Cannot use import statement outside a module/i.test(err.message);
+		if (isDepricatedModule) throw new Error("Plugin using depricated unsafe native code! Please ask the plugin author to rebuild!");
+		throw err;
+	}
 
 	globalThis.luna.modules[fileName] = exports;
 	const channel = `__LunaNative.${fileName}`;
