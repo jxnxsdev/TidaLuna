@@ -151,7 +151,16 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 		module: { exports: {} },
 		exports: {},
 		global: {},
+		__filename: `luna://${fileName}`,
+		__dirname: process.resourcesPath,
+
+		// Proxied
+		require,
+		WebAssembly,
+
+		// Mocked
 		process: mockProcess,
+
 		// Node.js specific
 		ReadableStream,
 		Buffer,
@@ -199,10 +208,6 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 
 		// Luna specific
 		luna,
-
-		// Proxied
-		require,
-		WebAssembly,
 	};
 
 	sandbox.global = sandbox;
@@ -219,25 +224,11 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 			},
 		});
 
-		const wrappedCode = `(function(exports, require, module, __filename, __dirname) { 
-            ${code} 
-        })`;
-
-		// Run in context -> returns the function
-		const compiledWrapper = vm.runInContext(wrappedCode, context, {
+		vm.runInContext(code, context, {
 			filename: `luna://${fileName}`,
 			timeout: 5000,
 			displayErrors: true,
 		});
-
-		// Call the function with our sandboxed tools
-		compiledWrapper.apply(sandbox.exports, [
-			sandbox.exports,
-			require,
-			sandbox.module,
-			`luna://${fileName}`, // __filename
-			process.resourcesPath, // __dirname
-		]);
 
 		return sandbox.module.exports as Module;
 	} catch (err) {
