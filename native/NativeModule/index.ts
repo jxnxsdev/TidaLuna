@@ -36,12 +36,12 @@ ipcHandle("__Luna.registerNative", async (_, fileName: string, code: string) => 
 		code,
 	};
 
-	let exports = secureLoad(moduleInfo);
+	let exports;
 	try {
-		exports;
+		exports = secureLoad(moduleInfo);
 	} catch (err) {
 		const isDepricatedModule = Error.isError(err) && /Cannot use import statement outside a module/i.test(err.message);
-		if (isDepricatedModule) throw new Error("Plugin using depricated unsafe native code! Please ask the plugin author to rebuild!");
+		if (isDepricatedModule) throw new Error("Plugin using deprecated unsafe native code! Please ask the plugin author to rebuild!");
 		throw err;
 	}
 

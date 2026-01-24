@@ -92,9 +92,9 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 
 	const WebAssembly = new Proxy(globalThis.WebAssembly, {
 		get(target, prop, receiver) {
-			console.warn(`[🛑Security🛑] "${fileName}" is loading WebAssembly (${String(prop)})!`);
+			console.warn(`[🛑Security🛑] '${fileName}' is loading WebAssembly (${String(prop)})!`);
 			if (!isTrusted(moduleInfo, "WebAssembly", target)) {
-				throw new Error(`[🛑Security🛑] Access Denied! User blocked 'WebAssembly' in '${fileName}'`);
+				throw new Error(`[🛑Security🛑] Access Denied! User blocked 'WebAssembly' (${String(prop)}) in '${fileName}'`);
 			}
 
 			return Reflect.get(target, prop, receiver);
@@ -135,12 +135,13 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 		argv: process.argv,
 
 		debugProcess: () => {
-			console.warn(`[🛑Security🛑] "${fileName}" is calling "process.debugProcess"`);
-			// if (!isTrusted(fileName, "DebugProcess", "Debug the main process, gives full system access!", hash)) {
-			// 	throw new Error(`Access Denied! User blocked "process.debugProcess" in "${fileName}"`);
-			// }
 			// @ts-expect-error This exists
-			process._debugProcess(process.pid);
+			const debugProcess: (pid: number) => void = process._debugProcess;
+			console.warn(`[🛑Security🛑] '${fileName}' is calling 'process.debugProcess'`);
+			if (!isTrusted(moduleInfo, "DebugProcess", debugProcess)) {
+				throw new Error(`[🛑Security🛑] Access Denied! User blocked 'process.debugProcess' in '${fileName}'`);
+			}
+			debugProcess(process.pid);
 			return process.debugPort;
 		},
 	};

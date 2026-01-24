@@ -29,6 +29,9 @@ export const moduleAlias = (moduleName: string) => {
 		case "clipboard":
 			return "your CLIPBOARD";
 
+		case "DebugProcess":
+			return "DEBUG the main process";
+
 		default:
 			return moduleName;
 	}
