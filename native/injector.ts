@@ -123,8 +123,14 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		if (isTidalWindow) {
 			// Luna preload via session (runs FIRST)
 			electron.session.defaultSession.setPreloads([path.join(bundleDir, "preload.mjs")]);
-			// Original preload via webPreferences (runs AFTER session preloads)
-			// Note: tidal-hifi preload uses @electron/remote which doesn't work with sandbox, so it will fail silently
+
+			// Detect and block tidal-hifi's preload (uses @electron/remote which doesn't work with sandbox)
+			const originalPreload = options.webPreferences?.preload;
+			if (originalPreload?.includes("tidal-hifi")) {
+				console.log(`[Luna.native] Blocking tidal-hifi preload: ${originalPreload}`);
+				delete options.webPreferences.preload;
+			}
+
 			options.webPreferences.sandbox = true;
 		}
 
