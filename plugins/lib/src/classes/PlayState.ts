@@ -183,12 +183,16 @@ export class PlayState {
 			}
 		});
 
-		// Preserve current track when clearing queue
+		// Preserve current track when clearing queue (manual clear only, not when playing new content)
 		let blockAutoPlay = false;
 		let blockTimeout: ReturnType<typeof setTimeout> | undefined;
 		const playActions = ["playbackControls/PLAY", "mix/PLAY_MIX", "playQueue/ADD_NOW", "playQueue/ADD_TRACK_LIST_TO_PLAY_QUEUE"] as const;
 		for (const action of playActions) {
-			redux.intercept(action, unloads, () => blockAutoPlay);
+			redux.intercept(action, unloads, (payload: { overwritePlayQueue?: boolean }) => {
+				// Allow if it's explicit new content (user playing something new)
+				if (payload?.overwritePlayQueue === true) return false;
+				return blockAutoPlay;
+			});
 		}
 
 		redux.intercept("playQueue/CLEAR_QUEUE", unloads, () => {
