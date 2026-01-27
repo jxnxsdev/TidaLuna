@@ -40,6 +40,13 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 	try {
 		await webFrame.executeJavaScript(
 			`(async () => {
+				// Skip popup windows (login, Themer editor, etc.) - only load on TIDAL pages
+				const isTidalPage = location.hostname.includes("tidal.com");
+				if (!isTidalPage) {
+					console.log("[Luna.preload] Skipping non-TIDAL page:", location.href);
+					return;
+				}
+
 				const originalConsole = { ...console };
 				try {
 					const renderJs = await __ipcRenderer.invoke("__Luna.renderJs");
