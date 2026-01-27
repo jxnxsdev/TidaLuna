@@ -116,9 +116,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		// Ensure smoothScrolling is always enabled
 		options.webPreferences.smoothScrolling = true;
 
-		// tidal-hifi does not set the title, rely on dev tools instead.
-		const isTidalWindow = options.title == "TIDAL" || options.webPreferences?.devTools;
-
 		// explicitly set icon before load on linux
 		const platformIsLinux = process.platform === "linux";
 		const iconPath = path.join(tidalAppPath, "assets/icon.png");
@@ -126,21 +123,29 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 			options.icon = iconPath;
 		}
 
-		if (isTidalWindow) {
-			// Luna preload via session (runs FIRST)
-			electron.session.defaultSession.setPreloads([path.join(bundleDir, "preload.mjs")]);
+		// Check if this is the main Tidal window
+		// tidal-hifi does not set the title, rely on dev tools instead.
+		const isTidalWindow = options.title === "TIDAL" || options.webPreferences?.devTools;
 
-			// Detect and block tidal-hifi's preload (uses @electron/remote which doesn't work with sandbox)
-			const originalPreload = options.webPreferences?.preload;
-			if (originalPreload?.includes("tidal-hifi")) {
-				console.log(`[Luna.native] Blocking tidal-hifi preload: ${originalPreload}`);
-				delete options.webPreferences.preload;
+		if (isTidalWindow) {
+			if (platformIsLinux) {
+				// Linux (tidal-hifi): Replace preload
+				options.webPreferences.preload = path.join(bundleDir, "preload.mjs");
+			} else {
+				// Windows/macOS (TIDAL official): Add Luna preload via session
+				electron.session.defaultSession.registerPreloadScript({
+					type: "frame",
+					filePath: path.join(bundleDir, "preload.mjs"),
+				});
 			}
 
+			// Sandbox isolates plugins from Node.js and system access
 			options.webPreferences.sandbox = true;
+			options.webPreferences.contextIsolation = true;
 		}
 
 		const window = new target(options);
+
 		globalThis.luna.sendToRender = window.webContents.send;
 
 		// if we are on linux and this is the main tidal window,
