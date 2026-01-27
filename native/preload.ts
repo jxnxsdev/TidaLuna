@@ -13,6 +13,9 @@ const expose = (name: string, value: any) => {
 	}
 };
 
+// Expose platform for OS-specific plugins
+expose("__platform", process.platform);
+
 // Allow render side to execute invoke
 expose("__ipcRenderer", {
 	invoke: ipcRenderer.invoke,
