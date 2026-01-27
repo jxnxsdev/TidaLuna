@@ -22,6 +22,12 @@ const tidalPackagePromise = readFile(path.join(tidalAppPath, "package.json"), "u
 // Requires starting client with --remote-debugging-port=9222
 electron.app.commandLine.appendSwitch("remote-allow-origins", "http://localhost:9222");
 
+// Linux sandbox fixes - must run BEFORE app is ready
+if (process.platform === "linux") {
+	// Zygote causes sandbox initialization failures on some Linux configurations
+	electron.app.commandLine.appendSwitch("no-zygote");
+}
+
 const bundleFile = async (url: string): Promise<[Buffer, ResponseInit]> => {
 	const fileName = url.slice(13);
 	// Eh, can already use native to touch fs dont stress escaping bundleDir
