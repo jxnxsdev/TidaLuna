@@ -168,6 +168,11 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		// Overload console logging to forward to dev-tools
 		const _console = console;
 		const consolePrefix = "[Luna.native]";
+		let rendererAlive = true;
+		window.webContents.on("render-process-gone", (_, details) => {
+			rendererAlive = false;
+			_console.error(consolePrefix, `Renderer process gone: ${details.reason}`);
+		});
 		console = new Proxy(_console, {
 			get(target, prop, receiver) {
 				const originalValue = target[prop as keyof typeof target];
@@ -178,16 +183,13 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 						}
 						// Call the original console method
 						(originalValue as Function).apply(target, args);
-						// Send the log data to the renderer process
-						try {
-							// Use prop.toString() in case prop is a Symbol
-							window.webContents.send("__Luna.console", prop.toString(), args);
-						} catch (e) {
-							const args = ["Failed to forward console to renderer", e];
-							_console.error(consolePrefix, ...args);
+						// Send the log data to the renderer process (if still alive)
+						if (rendererAlive && !window.webContents.isDestroyed()) {
 							try {
-								window.webContents.send("__Luna.console", "error", args);
-							} catch {}
+								window.webContents.send("__Luna.console", prop.toString(), args);
+							} catch (e) {
+								_console.error(consolePrefix, "Failed to forward console to renderer", e);
+							}
 						}
 					};
 				}
