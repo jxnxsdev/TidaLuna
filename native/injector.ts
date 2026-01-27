@@ -22,6 +22,12 @@ const tidalPackagePromise = readFile(path.join(tidalAppPath, "package.json"), "u
 // Requires starting client with --remote-debugging-port=9222
 electron.app.commandLine.appendSwitch("remote-allow-origins", "http://localhost:9222");
 
+// Linux sandbox fixes - must run BEFORE app is ready
+if (process.platform === "linux") {
+	// Zygote causes sandbox initialization failures on some Linux configurations
+	electron.app.commandLine.appendSwitch("no-zygote");
+}
+
 const bundleFile = async (url: string): Promise<[Buffer, ResponseInit]> => {
 	const fileName = url.slice(13);
 	// Eh, can already use native to touch fs dont stress escaping bundleDir
@@ -110,9 +116,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		// Ensure smoothScrolling is always enabled
 		options.webPreferences.smoothScrolling = true;
 
-		// tidal-hifi does not set the title, rely on dev tools instead.
-		const isTidalWindow = options.title == "TIDAL" || options.webPreferences?.devTools;
-
 		// explicitly set icon before load on linux
 		const platformIsLinux = process.platform === "linux";
 		const iconPath = path.join(tidalAppPath, "assets/icon.png");
@@ -120,21 +123,29 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 			options.icon = iconPath;
 		}
 
-		if (isTidalWindow) {
-			// Luna preload via session (runs FIRST)
-			electron.session.defaultSession.setPreloads([path.join(bundleDir, "preload.mjs")]);
+		// Check if this is the main Tidal window
+		// tidal-hifi does not set the title, rely on dev tools instead.
+		const isTidalWindow = options.title === "TIDAL" || options.webPreferences?.devTools;
 
-			// Detect and block tidal-hifi's preload (uses @electron/remote which doesn't work with sandbox)
-			const originalPreload = options.webPreferences?.preload;
-			if (originalPreload?.includes("tidal-hifi")) {
-				console.log(`[Luna.native] Blocking tidal-hifi preload: ${originalPreload}`);
-				delete options.webPreferences.preload;
+		if (isTidalWindow) {
+			if (platformIsLinux) {
+				// Linux (tidal-hifi): Replace preload
+				options.webPreferences.preload = path.join(bundleDir, "preload.mjs");
+			} else {
+				// Windows/macOS (TIDAL official): Add Luna preload via session
+				electron.session.defaultSession.registerPreloadScript({
+					type: "frame",
+					filePath: path.join(bundleDir, "preload.mjs"),
+				});
 			}
 
+			// Sandbox isolates plugins from Node.js and system access
 			options.webPreferences.sandbox = true;
+			options.webPreferences.contextIsolation = true;
 		}
 
 		const window = new target(options);
+
 		globalThis.luna.sendToRender = window.webContents.send;
 
 		// if we are on linux and this is the main tidal window,
@@ -157,6 +168,11 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		// Overload console logging to forward to dev-tools
 		const _console = console;
 		const consolePrefix = "[Luna.native]";
+		let rendererAlive = true;
+		window.webContents.on("render-process-gone", (_, details) => {
+			rendererAlive = false;
+			_console.error(consolePrefix, `Renderer process gone: ${details.reason}`);
+		});
 		console = new Proxy(_console, {
 			get(target, prop, receiver) {
 				const originalValue = target[prop as keyof typeof target];
@@ -167,16 +183,13 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 						}
 						// Call the original console method
 						(originalValue as Function).apply(target, args);
-						// Send the log data to the renderer process
-						try {
-							// Use prop.toString() in case prop is a Symbol
-							window.webContents.send("__Luna.console", prop.toString(), args);
-						} catch (e) {
-							const args = ["Failed to forward console to renderer", e];
-							_console.error(consolePrefix, ...args);
+						// Send the log data to the renderer process (if still alive)
+						if (rendererAlive && !window.webContents.isDestroyed()) {
 							try {
-								window.webContents.send("__Luna.console", "error", args);
-							} catch {}
+								window.webContents.send("__Luna.console", prop.toString(), args);
+							} catch (e) {
+								_console.error(consolePrefix, "Failed to forward console to renderer", e);
+							}
 						}
 					};
 				}
