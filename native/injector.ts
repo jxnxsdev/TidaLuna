@@ -53,52 +53,86 @@ const bundleFile = async (url: string): Promise<[Buffer, ResponseInit]> => {
 const lunaBundle = bundleFile("https://luna/luna.mjs").then(([content]) => content);
 ipcHandle("__Luna.renderJs", () => lunaBundle);
 
-// #region CSP/Script Prep
+// #region HTTPS Handler
+const tidalMainHosts = new Set(["listen.tidal.com", "tidal.com", "desktop.tidal.com"]);
+let httpsHandlerActive = false;
+
+const httpsHandler = async (req: Request): Promise<Response> => {
+	if (req.url.startsWith("https://luna/")) {
+		try {
+			// @ts-expect-error: Buffer is valid for Response body
+			return new Response(...(await bundleFile(req.url)));
+		} catch (err: any) {
+			return new Response(err.message, { status: err.message.startsWith("ENOENT") ? 404 : 500, statusText: err.message });
+		}
+	}
+
+	// Bypass CSP & Mark meta scripts for quartz injection on Tidal main pages
+	const reqUrl = new URL(req.url);
+	if (tidalMainHosts.has(reqUrl.hostname) && reqUrl.pathname === "/") {
+		const res = await electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
+		let body = await res.text();
+		body = body.replace(
+			/(<meta http-equiv="Content-Security-Policy")|(<script type="module" crossorigin src="(.*?)">)/g,
+			(match, cspMatch, scriptMatch, src) => {
+				if (cspMatch) {
+					// Remove CSP
+					return `<meta name="LunaWuzHere"`;
+				} else if (scriptMatch) {
+					// Mark module scripts for quartz injection
+					return `<script type="luna/quartz" src="${src}">`;
+				}
+
+				// Should not happen if the regex is correct
+				return match;
+			},
+		);
+		return new Response(body, res);
+	}
+
+	// Fix tidal trying to bypass cors
+	if (req.url.endsWith("?cors")) return fetch(req);
+
+	// Fix font loading - fonts require credentials: 'omit' for CORS
+	if (fontUrlRegex.test(req.url)) {
+		return electron.net.fetch(req.url, {
+			bypassCustomProtocolHandlers: true,
+			credentials: "omit",
+		});
+	}
+
+	// All other requests passthrough
+	try {
+		return await electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
+	} catch (err: any) {
+		console.error(`[HTTPS] Fetch error for ${req.url}:`, err.message);
+		throw err;
+	}
+};
+
+const registerHttpsHandler = () => {
+	try {
+		electron.protocol.handle("https", httpsHandler);
+	} catch {
+		// Handler might already be registered
+	}
+	httpsHandlerActive = true;
+};
+
+const unregisterHttpsHandler = () => {
+	try {
+		electron.protocol.unhandle("https");
+	} catch {
+		// Handler might not be registered
+	}
+	httpsHandlerActive = false;
+};
+
 // Ensure app is ready
 electron.app.whenReady().then(async () => {
-	electron.protocol.handle("https", async (req) => {
-		if (req.url.startsWith("https://luna/")) {
-			try {
-				// @ts-expect-error: Buffer is valid for Response body
-				return new Response(...(await bundleFile(req.url)));
-			} catch (err: any) {
-				return new Response(err.message, { status: err.message.startsWith("ENOENT") ? 404 : 500, statusText: err.message });
-			}
-		}
+	// Register the HTTPS handler
+	registerHttpsHandler();
 
-		// Bypass CSP & Mark meta scripts for quartz injection
-		if (req.url === "https://desktop.tidal.com/" || req.url === "https://tidal.com/" || req.url === "https://listen.tidal.com/") {
-			const res = await electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
-			let body = await res.text();
-			body = body.replace(
-				/(<meta http-equiv="Content-Security-Policy")|(<script type="module" crossorigin src="(.*?)">)/g,
-				(match, cspMatch, scriptMatch, src) => {
-					if (cspMatch) {
-						// Remove CSP
-						return `<meta name="LunaWuzHere"`;
-					} else if (scriptMatch) {
-						// Mark module scripts for quartz injection
-						return `<script type="luna/quartz" src="${src}">`;
-					}
-
-					// Should not happen if the regex is correct
-					return match;
-				},
-			);
-			return new Response(body, res);
-		}
-		// Fix tidal trying to bypass cors
-		if (req.url.endsWith("?cors")) return fetch(req);
-		// Fix font loading - fonts require credentials: 'omit' for CORS
-		if (fontUrlRegex.test(req.url)) {
-			return electron.net.fetch(req.url, {
-				bypassCustomProtocolHandlers: true,
-				credentials: "omit",
-			});
-		}
-		// All other requests passthrough
-		return electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
-	});
 	// Force service worker to fetch resources by clearing it's cache.
 	electron.session.defaultSession.clearStorageData({
 		storages: ["cachestorage"],
@@ -147,6 +181,66 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		const window = new target(options);
 
 		globalThis.luna.sendToRender = window.webContents.send;
+
+
+		// Linux (tidal-hifi): Handle OAuth login in a popup window
+		if (platformIsLinux) {
+			let loginWindow: electron.BrowserWindow | null = null;
+			let authCallbackPending = false;
+
+			window.webContents.on("will-navigate", (event, url) => {
+				if (!url.startsWith("https://login.tidal.com/authorize")) return;
+
+				event.preventDefault();
+				if (loginWindow) {
+					loginWindow.loadURL(url);
+					loginWindow.show();
+					return;
+				}
+
+				loginWindow = new electron.BrowserWindow({
+					width: 600,
+					height: 700,
+					backgroundColor: "#151a22",
+					webPreferences: {
+						contextIsolation: true,
+						nodeIntegration: false,
+						session: electron.session.defaultSession,
+					},
+
+				});
+				loginWindow.setMenuBarVisibility(false);
+
+				unregisterHttpsHandler();
+				loginWindow.loadURL(url);
+
+				loginWindow.on("closed", () => {
+					loginWindow = null;
+					if (!authCallbackPending) registerHttpsHandler();
+				});
+
+				loginWindow.webContents.on("will-redirect", (event, redirectUrl) => {
+					const navUrl = new URL(redirectUrl);
+					if (!tidalMainHosts.has(navUrl.hostname)) return;
+					if (!navUrl.pathname.startsWith("/login/auth")) return;
+					if (!navUrl.searchParams.has("code")) return;
+
+					event.preventDefault();
+					authCallbackPending = true;
+					loginWindow?.destroy();
+					loginWindow = null;
+					registerHttpsHandler();
+
+					// Trigger SPA navigation without page reload
+					const authPath = navUrl.pathname + navUrl.search;
+					window.webContents.executeJavaScript(`
+						window.history.pushState({}, "", "${authPath}");
+						window.dispatchEvent(new PopStateEvent("popstate", { state: {} }));
+					`);
+					authCallbackPending = false;
+				});
+			});
+		}
 
 		// if we are on linux and this is the main tidal window,
 		// set the icon again after load (potential KDE quirk)
