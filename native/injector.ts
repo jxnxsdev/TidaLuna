@@ -242,9 +242,19 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 			});
 		}
 
-		// Notify renderer to unload plugins before window closes
-		window.on("close", () => {
-			window.webContents.send("window.close");
+		// Notify renderer to unload plugins before window closes (but not when minimizing to tray)
+		window.on("close", (event) => {
+			// Use setImmediate to check after other handlers have run
+			// If defaultPrevented is true, it's a close-to-tray, so skip unloading plugins
+			setImmediate(() => {
+				if (!event.defaultPrevented) {
+					try {
+						window.webContents.send("window.close");
+					} catch {
+						// Window might already be destroyed
+					}
+				}
+			});
 		});
 
 		// if we are on linux and this is the main tidal window,
