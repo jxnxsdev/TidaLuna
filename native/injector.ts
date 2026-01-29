@@ -242,6 +242,11 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 			});
 		}
 
+		// Notify renderer to unload plugins before window closes
+		window.on("close", () => {
+			window.webContents.send("window.close");
+		});
+
 		// if we are on linux and this is the main tidal window,
 		// set the icon again after load (potential KDE quirk)
 		if (platformIsLinux && isTidalWindow) {

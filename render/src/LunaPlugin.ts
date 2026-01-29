@@ -70,8 +70,8 @@ export class LunaPlugin {
 	public static readonly corePlugins: Set<string> = new Set(["@luna/lib", "@luna/lib.native", "@luna/ui", "@luna/dev", "@luna/linux"]);
 
 	static {
-		// Ensure all plugins are unloaded on beforeunload
-		addEventListener("beforeunload", () => {
+		// Unload all plugins when main process signals window is closing
+		__ipcRenderer.on("window.close", () => {
 			for (const plugin of Object.values(LunaPlugin.plugins)) {
 				plugin.unload().catch((err) => {
 					const errMsg = `[Luna] Failed to unload plugin ${plugin.name}! Please report this to the Luna devs. ${err?.message}`;
