@@ -167,10 +167,18 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 				options.webPreferences.preload = path.join(bundleDir, "preload.mjs");
 			} else {
 				// Windows/macOS (TIDAL official): Add Luna preload via session
-				electron.session.defaultSession.registerPreloadScript({
-					type: "frame",
-					filePath: path.join(bundleDir, "preload.mjs"),
-				});
+				const lunaPreload = path.join(bundleDir, "preload.mjs");
+				if (typeof electron.session.defaultSession.registerPreloadScript === "function") {
+					// Electron 35+: Use new API
+					electron.session.defaultSession.registerPreloadScript({
+						type: "frame",
+						filePath: lunaPreload,
+					});
+				} else {
+					// Electron < 35: Use legacy setPreloads API
+					const existingPreloads = electron.session.defaultSession.getPreloads();
+					electron.session.defaultSession.setPreloads([...existingPreloads, lunaPreload]);
+				}
 			}
 
 			// Sandbox isolates plugins from Node.js and system access
