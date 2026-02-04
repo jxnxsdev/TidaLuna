@@ -9,3 +9,4 @@ export const showSaveDialog = luna.showSaveDialog;
 export const showMessageBox = luna.showMessageBox;
 export const showErrorBox = luna.showErrorBox;
 export const clipboardWriteText = luna.clipboardWriteText;
+export const openExternal = luna.openExternal;
