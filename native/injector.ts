@@ -301,7 +301,7 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 						// Call the original console method
 						(originalValue as Function).apply(target, args);
 						// Send the log data to the renderer process (if still alive)
-						if (rendererAlive && !window.webContents.isDestroyed()) {
+						if (rendererAlive && !window.isDestroyed() && !window.webContents.isDestroyed()) {
 							try {
 								window.webContents.send("__Luna.console", prop.toString(), args);
 							} catch (e) {
