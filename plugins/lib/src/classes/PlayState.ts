@@ -191,20 +191,43 @@ export class PlayState {
 	 */
 	public static onScrobble: AddReceiver<MediaItem> = registerEmitter(async (onScrobble) => {
 		this.currentMediaItem = await MediaItem.fromPlaybackContext();
+		let hasScrobbledCurrent = false;
+
+		const checkAndScrobble = (mediaItem: MediaItem): boolean => {
+			if (hasScrobbledCurrent) return false;
+			if (mediaItem.duration === undefined) return false;
+
+			if (this.lastPlayStart !== undefined) {
+				this.cumulativePlaytime += Date.now() - this.lastPlayStart;
+			}
+
+			const longerThan4min = this.cumulativePlaytime >= this.MIN_SCROBBLE_DURATION;
+			const minPlayTime = mediaItem.duration * this.MIN_SCROBBLE_PERCENTAGE * 1000;
+			const moreThan50Percent = this.cumulativePlaytime >= minPlayTime;
+
+			if (longerThan4min || moreThan50Percent) {
+				hasScrobbledCurrent = true;
+				onScrobble(mediaItem, this.trace.err.withContext("onScrobble"));
+				return true;
+			}
+			return false;
+		};
+
 		MediaItem.onMediaTransition(unloads, (mediaItem) => {
-			// Dont use mediaItem as its the NEXT track not the one we just finished listening to
-			const isRepeating = this.repeatMode === this.RepeatMode.One;
-			if (this.currentMediaItem !== undefined && (!isRepeating && (this.currentMediaItem.id !== mediaItem.id))) {
-				if (this.currentMediaItem.duration === undefined) return;
-				if (this.lastPlayStart !== undefined) this.cumulativePlaytime += Date.now() - this.lastPlayStart;
-				const longerThan4min = this.cumulativePlaytime >= this.MIN_SCROBBLE_DURATION;
-				const minPlayTime = this.currentMediaItem.duration * this.MIN_SCROBBLE_PERCENTAGE * 1000;
-				const moreThan50Percent = this.cumulativePlaytime >= minPlayTime;
-				if (longerThan4min || moreThan50Percent) onScrobble(this.currentMediaItem, this.trace.err.withContext("onScrobble"));
+			// Scrobble the track we just finished (works for normal transitions AND repeat mode)
+			if (this.currentMediaItem !== undefined) {
+				checkAndScrobble(this.currentMediaItem);
 			}
 			this.currentMediaItem = mediaItem;
-			// reset as we started playing a new one
 			this.cumulativePlaytime = 0;
+			hasScrobbledCurrent = false;
+		});
+
+		// Handle playback ending without transition (end of queue)
+		redux.intercept("playbackControls/SET_PLAYBACK_STATE", unloads, (state) => {
+			if (state === "IDLE" && this.currentMediaItem !== undefined) {
+				checkAndScrobble(this.currentMediaItem);
+			}
 		});
 	});
 
