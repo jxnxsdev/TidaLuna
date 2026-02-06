@@ -26,6 +26,40 @@ electron.app.commandLine.appendSwitch("remote-allow-origins", "http://localhost:
 if (process.platform === "linux") {
 	// Zygote causes sandbox initialization failures on some Linux configurations
 	electron.app.commandLine.appendSwitch("no-zygote");
+
+	// Match tidal-hifi's .desktop StartupWMClass so GNOME/KDE shows the correct dock icon
+	// --class works for X11, CHROME_DESKTOP sets the Wayland app_id
+	electron.app.commandLine.appendSwitch("class", "tidal-hifi");
+	electron.app.name = "tidal-hifi";
+	process.env.CHROME_DESKTOP = "tidal-hifi.desktop";
+
+	// tidal-hifi settings access for Linux integration
+	ipcHandle("__Luna.getTidalHifiSetting", async (_, key: string) => {
+		try {
+			const configPath = path.join(electron.app.getPath("userData"), "config.json");
+			const config = JSON.parse(await readFile(configPath, "utf8"));
+			// Support nested keys like "discord.showSong"
+			return key.split(".").reduce((obj, k) => obj?.[k], config);
+		} catch {
+			return undefined;
+		}
+	});
+
+	// tidal-hifi theme file reading
+	ipcHandle("__Luna.getTidalHifiThemeCSS", async (_, themeName: string) => {
+		if (!themeName || themeName === "none") return undefined;
+		const userPath = path.join(electron.app.getPath("userData"), "themes", themeName);
+		const resourcesPath = path.join(process.resourcesPath, themeName);
+		try {
+			return await readFile(userPath, "utf8");
+		} catch {
+			try {
+				return await readFile(resourcesPath, "utf8");
+			} catch {
+				return undefined;
+			}
+		}
+	});
 }
 
 const bundleFile = async (url: string): Promise<[Buffer, ResponseInit]> => {
@@ -54,7 +88,7 @@ const lunaBundle = bundleFile("https://luna/luna.mjs").then(([content]) => conte
 ipcHandle("__Luna.renderJs", () => lunaBundle);
 
 // #region HTTPS Handler
-const tidalMainHosts = new Set(["listen.tidal.com", "tidal.com", "desktop.tidal.com"]);
+const tidalMainHosts = new Set(["listen.tidal.com", "tidal.com", "desktop.tidal.com", "stage.tidal.com"]);
 let httpsHandlerActive = false;
 
 const httpsHandler = async (req: Request): Promise<Response> => {
@@ -150,12 +184,7 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		// Ensure smoothScrolling is always enabled
 		options.webPreferences.smoothScrolling = true;
 
-		// explicitly set icon before load on linux
 		const platformIsLinux = process.platform === "linux";
-		const iconPath = path.join(tidalAppPath, "assets/icon.png");
-		if (platformIsLinux) {
-			options.icon = iconPath;
-		}
 
 		// Check if this is the main Tidal window
 		// tidal-hifi does not set the title, rely on dev tools instead.
@@ -189,7 +218,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 		const window = new target(options);
 
 		globalThis.luna.sendToRender = window.webContents.send;
-
 
 		// Linux (tidal-hifi): Handle OAuth login in a popup window
 		if (platformIsLinux) {
@@ -264,14 +292,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 				}
 			});
 		});
-
-		// if we are on linux and this is the main tidal window,
-		// set the icon again after load (potential KDE quirk)
-		if (platformIsLinux && isTidalWindow) {
-			window.webContents.once("did-finish-load", () => {
-				window.setIcon(iconPath);
-			});
-		}
 
 		// #region Open from link
 		// MacOS
@@ -353,9 +373,11 @@ electron.Menu.buildFromTemplate = (template) => {
 	template.push({
 		role: "toggleDevTools",
 		visible: false,
+		accelerator: "F12",
 	});
 	return originalBuildFromTemplate(template);
 };
+
 // #endregion
 
 // #region Start app
@@ -371,3 +393,4 @@ ipcHandle("__Luna.preloadErr", async (_, err: Error) => {
 	console.error(err);
 	electron.dialog.showErrorBox("TidaLuna", err.message);
 });
+
