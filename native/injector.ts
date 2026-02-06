@@ -219,7 +219,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 
 		globalThis.luna.sendToRender = window.webContents.send;
 
-
 		// Linux (tidal-hifi): Handle OAuth login in a popup window
 		if (platformIsLinux) {
 			let loginWindow: electron.BrowserWindow | null = null;
@@ -374,9 +373,11 @@ electron.Menu.buildFromTemplate = (template) => {
 	template.push({
 		role: "toggleDevTools",
 		visible: false,
+		accelerator: "F12",
 	});
 	return originalBuildFromTemplate(template);
 };
+
 // #endregion
 
 // #region Start app
