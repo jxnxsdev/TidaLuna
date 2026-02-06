@@ -40,10 +40,11 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 	try {
 		await webFrame.executeJavaScript(
 			`(async () => {
-				// Skip popup windows (login, Themer editor, etc.) - only load on TIDAL pages
-				const isTidalPage = location.hostname.includes("tidal.com");
-				if (!isTidalPage) {
-					console.log("[Luna.preload] Skipping non-TIDAL page:", location.href);
+				// Skip popup windows (login, Themer editor, etc.) and non-SPA pages (magazine, etc.)
+				// Only load on the main TIDAL SPA entry point (pathname "/")
+				const isTidalApp = location.hostname.includes("tidal.com") && location.pathname === "/";
+				if (!isTidalApp) {
+					console.log("[Luna.preload] Skipping non-TIDAL app page:", location.href);
 					return;
 				}
 
