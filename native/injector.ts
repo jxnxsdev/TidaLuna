@@ -217,7 +217,7 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 
 		const window = new target(options);
 
-		globalThis.luna.sendToRender = window.webContents.send;
+		globalThis.luna.sendToRender = window.webContents.send.bind(window.webContents);
 
 		// Linux (tidal-hifi): Handle OAuth login in a popup window
 		if (platformIsLinux) {
