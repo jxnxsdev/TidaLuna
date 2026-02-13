@@ -101,7 +101,7 @@ importers:
       flac-stream-tagger:
         specifier: ^1.0.10
         version: 1.0.10
-        
+
   plugins/ui:
     dependencies:
       '@emotion/react':
