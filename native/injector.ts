@@ -243,7 +243,6 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 						nodeIntegration: false,
 						session: electron.session.defaultSession,
 					},
-
 				});
 				loginWindow.setMenuBarVisibility(false);
 
@@ -277,6 +276,14 @@ const ProxiedBrowserWindow = new Proxy(electron.BrowserWindow, {
 				});
 			});
 		}
+
+		// Allow opening dev tools with F12 without interfering with Tidal's own shortcuts (e.g., Ctrl+Shift+I)
+		window.webContents.on("before-input-event", (event, input) => {
+			if (input.key === "F12") {
+				window.webContents.toggleDevTools();
+				event.preventDefault();
+			}
+		});
 
 		// Notify renderer to unload plugins before window closes (but not when minimizing to tray)
 		window.on("close", (event) => {
@@ -373,7 +380,6 @@ electron.Menu.buildFromTemplate = (template) => {
 	template.push({
 		role: "toggleDevTools",
 		visible: false,
-		accelerator: "F12",
 	});
 	return originalBuildFromTemplate(template);
 };
@@ -393,4 +399,3 @@ ipcHandle("__Luna.preloadErr", async (_, err: Error) => {
 	console.error(err);
 	electron.dialog.showErrorBox("TidaLuna", err.message);
 });
-
