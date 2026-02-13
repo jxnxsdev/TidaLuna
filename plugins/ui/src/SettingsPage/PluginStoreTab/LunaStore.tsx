@@ -14,7 +14,7 @@ interface StorePackage extends PluginPackage {
 	plugins: string[];
 }
 
-export const LunaStore = React.memo(({ url, onRemove }: { url: string; onRemove: () => void }) => {
+export const LunaStore = React.memo(({ url, onRemove, searchQuery }: { url: string; onRemove: () => void; searchQuery: string }) => {
 	const [loading, setLoading] = React.useState(false);
 	const [loadError, setLoadError] = React.useState<string | undefined>(undefined);
 	const [pkg, setPackage] = React.useState<StorePackage | undefined>(undefined);
@@ -58,6 +58,10 @@ export const LunaStore = React.memo(({ url, onRemove }: { url: string; onRemove:
 	// Don't show error for local dev store
 	if (loadError && isLocalDevStore) return null;
 
+	const query = searchQuery.toLowerCase();
+	const filteredPlugins = query ? pkg?.plugins.filter((plugin) => plugin.toLowerCase().includes(query)) : pkg?.plugins;
+	if (query && (!filteredPlugins || filteredPlugins.length === 0)) return null;
+
 	return (
 		<Stack
 			spacing={1}
@@ -82,7 +86,7 @@ export const LunaStore = React.memo(({ url, onRemove }: { url: string; onRemove:
 				}
 			/>
 			<Grid columns={2} spacing={2} container>
-				{pkg?.plugins.map((plugin) => (
+				{filteredPlugins?.map((plugin) => (
 					<Grid size={1} children={<LunaStorePlugin url={`${url}/${isLocalDevStore ? plugin : plugin.replace(" ", ".")}`} key={plugin} />} />
 				))}
 			</Grid>
