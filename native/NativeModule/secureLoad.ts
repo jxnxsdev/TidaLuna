@@ -117,7 +117,7 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 		nextTick: (...args: Parameters<typeof process.nextTick>) => process.nextTick(...args),
 		hrtime: (time?: [number, number]) => process.hrtime(time),
 		...objectify({
-			env: process.env,
+			env: {},
 			version: process.version,
 			versions: process.versions,
 			platform: process.platform,
@@ -132,7 +132,7 @@ export const secureLoad = (moduleInfo: NativeModuleInfo): Module["exports"] => {
 		resourcesPath: process.resourcesPath,
 
 		cwd: () => process.cwd(),
-		argv: process.argv,
+		argv: Object.freeze([...process.argv]),
 
 		debugProcess: () => {
 			// @ts-expect-error This exists
