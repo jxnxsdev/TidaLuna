@@ -93,6 +93,8 @@ ipcHandle("__Luna.renderJs", () => lunaBundle);
 
 // #region HTTPS Handler
 const tidalMainHosts = new Set(["listen.tidal.com", "tidal.com", "desktop.tidal.com", "stage.tidal.com"]);
+const lunaPages = new Set<string>();
+ipcHandle("__Luna.isLunaPage", async (_, href: string) => lunaPages.has(new URL(href).origin + new URL(href).pathname));
 let httpsHandlerActive = false;
 
 const httpsHandler = async (req: Request): Promise<Response> => {
@@ -107,9 +109,13 @@ const httpsHandler = async (req: Request): Promise<Response> => {
 
 	// Bypass CSP & Mark meta scripts for quartz injection on Tidal main pages
 	const reqUrl = new URL(req.url);
-	if (tidalMainHosts.has(reqUrl.hostname) && reqUrl.pathname === "/") {
+	if (tidalMainHosts.has(reqUrl.hostname) && !path.extname(reqUrl.pathname)) {
 		const res = await electron.net.fetch(req, { bypassCustomProtocolHandlers: true });
+		const contentType = res.headers.get("content-type") ?? "";
+		if (!contentType.includes("text/html")) return res;
 		let body = await res.text();
+		// Only modify the Tidal SPA shell (contains CSP meta tag)
+		if (!body.includes('<meta http-equiv="Content-Security-Policy"')) return new Response(body, res);
 		body = body.replace(
 			/(<meta http-equiv="Content-Security-Policy")|(<script type="module" crossorigin src="(.*?)">)/g,
 			(match, cspMatch, scriptMatch, src) => {
@@ -125,6 +131,7 @@ const httpsHandler = async (req: Request): Promise<Response> => {
 				return match;
 			},
 		);
+		lunaPages.add(reqUrl.origin + reqUrl.pathname);
 		return new Response(body, res);
 	}
 
