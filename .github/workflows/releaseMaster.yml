@@ -43,7 +43,7 @@ jobs:
      with:
       packages: nix-update
       script: |
-       nix-update --flake injection-darwin --version=${{ env.VERSION }}
+       nix-update --flake injection-darwin --version=${{ env.VERSION }} --system aarch64-darwin
        nix-update --flake injection-linux --version=${{ env.VERSION }}
-       nix-update --flake darwin-package --version=skip
+       nix-update --flake darwin-package --version=skip --system aarch64-darwin
    - uses: stefanzweifel/git-auto-commit-action@v5
