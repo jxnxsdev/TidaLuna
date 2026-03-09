@@ -48,6 +48,6 @@
     });
 
     # Overlay (if preferred)
-    overlays.default = final: _: {tidal-hifi = final.callPackage ./nix/linux-package.nix {};};
+    overlays.default = final: prev: {tidal-hifi = final.callPackage ./nix/linux-package.nix {tidal-hifi = prev.tidal-hifi;};};
   };
 }
