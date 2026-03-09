@@ -12,7 +12,7 @@ in
 
     src = fetchurl {
       url = "https://download.tidal.com/desktop/TIDAL.arm64.dmg";
-      sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
+      sha256 = "sha256-77Z5i4m2nQtfw7CAZqWNybYzpUZG+mEqltlK/llKQJ0=";
     };
 
     dontUnpack = true;
