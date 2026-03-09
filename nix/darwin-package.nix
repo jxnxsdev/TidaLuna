@@ -8,7 +8,7 @@
 
   tidalDmg = fetchurl {
     url = "https://download.tidal.com/desktop/TIDAL.arm64.dmg";
-    sha256 = "sha256-w5tQscUkhxpWOToAP4oIJJstCNFIdosebTyDI1zFIAE=";
+    sha256 = "sha256-AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=";
   };
 in
   import ./darwin-tidal.nix {
