@@ -1,13 +1,11 @@
 {
 	"type": "module",
 	"devDependencies": {
-		"@types/adm-zip": "^0.5.7",
 		"electron": "^38.2.0",
 		"type-fest": "^5.0.1"
 	},
 	"dependencies": {
-		"adm-zip": "^0.5.16",
-		"fflate": "^0.8.2",
+		"jszip": "^3.10.1",
 		"mime": "^4.1.0"
 	}
 }

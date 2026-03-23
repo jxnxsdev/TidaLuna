@@ -12,6 +12,7 @@ export { modules, reduxStore } from "./modules";
 
 export * from "./LunaPlugin";
 export * from "./ReactiveStore";
+export * from "./SettingsTransfer";
 
 // Ensure this is loaded
 import "./window.core";
@@ -23,6 +24,12 @@ setTimeout(async () => {
 	// Load lib
 	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib.native" });
 	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.lib" });
+
+	// Load Linux-specific plugins
+	if (__platform === "linux") {
+		await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.linux" });
+	}
+
 	// Load ui after lib as it depends on it.
 	await LunaPlugin.fromStorage({ enabled: true, url: "https://luna/luna.ui" });
 

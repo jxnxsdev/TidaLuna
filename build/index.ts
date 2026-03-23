@@ -47,7 +47,7 @@ export const pluginBuildOptions = async (pluginPath: string, opts?: BuildOptions
 					module.exports = luna?.core?.modules?.["${module}"];
 					if (module.exports === undefined) throw new Error("Cannot find module ${module} in luna.core.modules");
 					// Icky but it works
-					luna.core.LunaPlugin.plugins["${module}"]?.addDependant(luna.core.LunaPlugin.plugins["${pkgName}"]);
+					luna.core.LunaPlugin.getByName("${module}")?.addDependant(luna.core.LunaPlugin.getByName("${pkgName}"));
 				`,
 			}),
 			fileUrlPlugin,

@@ -5,6 +5,7 @@ import { store as obyStore } from "oby";
 import { ReactiveStore } from "@luna/core";
 
 import Stack from "@mui/material/Stack";
+import TextField from "@mui/material/TextField";
 
 import { InstallFromUrl } from "./InstallFromUrl";
 import { LunaStore } from "./LunaStore";
@@ -36,9 +37,11 @@ addToStores("https://github.com/Renskursa/tidaluna-plugins/releases/download/lat
 addToStores("https://github.com/Henr1ES/TidalLunaPlugins/releases/download/latest/store.json");
 addToStores("https://github.com/DevonCasey/tidaluna-plugins/releases/download/latest/store.json");
 addToStores("https://github.com/SinnerK0N/tidaluna-plugins/releases/download/latest/store.json");
+addToStores("https://github.com/squadgazzz/luna-plugins/releases/download/latest/store.json");
 
 export const PluginStoreTab = React.memo(() => {
 	const [_storeUrls, setPluginStores] = useState<string[]>(obyStore.unwrap(storeUrls));
+	const [searchQuery, setSearchQuery] = useState("");
 
 	useEffect(() => obyStore.on(storeUrls, () => setPluginStores([...obyStore.unwrap(storeUrls)])), []);
 	const onRemove = useCallback((storeUrl: string) => {
@@ -48,10 +51,19 @@ export const PluginStoreTab = React.memo(() => {
 
 	return (
 		<Stack spacing={2}>
-			<InstallFromUrl />
-			<LunaStore url={"http://127.0.0.1:3000"} onRemove={() => {}} />
+			<Stack direction="row" spacing={2}>
+				<InstallFromUrl />
+				<TextField
+					fullWidth
+					size="small"
+					placeholder="Search plugins..."
+					value={searchQuery}
+					onChange={(e) => setSearchQuery(e.target.value)}
+				/>
+			</Stack>
+			<LunaStore url={"http://127.0.0.1:3000"} onRemove={() => {}} searchQuery={searchQuery} />
 			{_storeUrls.map((store) => (
-				<LunaStore key={store} url={store} onRemove={() => onRemove(store)} />
+				<LunaStore key={store} url={store} onRemove={() => onRemove(store)} searchQuery={searchQuery} />
 			))}
 		</Stack>
 	);

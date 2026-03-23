@@ -1,4 +1,5 @@
-import { sleep, unloadableEmitter, type AnyFn } from "@inrixia/helpers";
+import { unloadableEmitter, type AnyFn } from "@inrixia/helpers";
+
 import { contextBridge, ipcRenderer, webFrame } from "electron";
 
 const ipcRendererUnloadable = unloadableEmitter(ipcRenderer, null, "ipcRenderer");
@@ -11,6 +12,9 @@ const expose = (name: string, value: any) => {
 		(window as any)[name] = value;
 	}
 };
+
+// Expose platform for OS-specific plugins
+expose("__platform", process.platform);
 
 // Allow render side to execute invoke
 expose("__ipcRenderer", {
@@ -36,6 +40,13 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 	try {
 		await webFrame.executeJavaScript(
 			`(async () => {
+				// Check with the main process if this page was processed by Luna's HTTPS handler
+				const isLunaPage = await __ipcRenderer.invoke("__Luna.isLunaPage", location.href);
+				if (!isLunaPage) {
+					console.log("[Luna.preload] Skipping non-Luna page:", location.href);
+					return;
+				}
+
 				const originalConsole = { ...console };
 				try {
 					const renderJs = await __ipcRenderer.invoke("__Luna.renderJs");
@@ -64,8 +75,6 @@ ipcRenderer.on("__Luna.console", (_event, prop: ConsoleMethodName, args: any[]) 
 			})()`,
 			true,
 		);
-		await sleep(0);
-		eval(await ipcRenderer.invoke("__Luna.originalPreload"));
 	} catch (err) {
 		ipcRenderer.invoke("__Luna.preloadErr", err);
 		throw err;

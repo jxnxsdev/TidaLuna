@@ -34,6 +34,8 @@ declare global {
 			dev?: typeof import("@luna/dev");
 		};
 	}
+	// Define platform export (see native/preload.ts)
+	const __platform: NodeJS.Platform;
 	// Define ipcRenderer exports (see native/preload.ts)
 	const __ipcRenderer: {
 		//** Dont use this! Use @luna/lib ipcRenderer */
