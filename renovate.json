@@ -4,10 +4,11 @@
     {
       "customType": "regex",
       "managerFilePatterns": [
-        "/^\\.github/workflows/flake-review\\.yml$/"
+        "/^\\.github/workflows/flake-review-.*\\.yml$/"
       ],
       "matchStrings": [
-        "flake-review-ref: \"(?<currentValue>[^\"]+)\""
+        "flake-review-ref: \"(?<currentValue>[^\"]+)\"",
+        "ojsef39/flake-review/[^@\\s]+@(?<currentValue>[^\\s]+)"
       ],
       "depNameTemplate": "ojsef39/flake-review",
       "datasourceTemplate": "github-tags"
