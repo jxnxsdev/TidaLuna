@@ -5,3 +5,8 @@ packages:
 
 overrides:
  yaml@<1.10.3: ">=1.10.3"
+
+allowBuilds:
+ "@biomejs/biome": true
+ electron: true
+ esbuild: true
