@@ -35,7 +35,6 @@ addToStores("https://github.com/Akasiek/tidaluna-plugins/releases/download/lates
 addToStores("https://github.com/Foukapik/TidaLuna-Plugins/releases/download/latest/store.json");
 addToStores("https://github.com/Renskursa/tidaluna-plugins/releases/download/latest/store.json");
 addToStores("https://github.com/Henr1ES/TidalLunaPlugins/releases/download/latest/store.json");
-addToStores("https://github.com/DevonCasey/tidaluna-plugins/releases/download/latest/store.json");
 addToStores("https://github.com/SinnerK0N/tidaluna-plugins/releases/download/latest/store.json");
 addToStores("https://github.com/squadgazzz/luna-plugins/releases/download/latest/store.json");
 addToStores("https://github.com/minseokk7/luna-plugins/releases/download/latest/store.json");
