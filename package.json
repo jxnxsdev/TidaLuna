@@ -43,10 +43,5 @@
     "clean-css": "^5.3.3",
     "esbuild": "^0.27.1",
     "html-minifier-terser": "^7.2.0"
-  },
-  "pnpm": {
-    "overrides": {
-      "yaml@<1.10.3": ">=1.10.3"
-    }
   }
 }
